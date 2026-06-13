@@ -70,6 +70,23 @@ const getScheduleStatus = (schedule, now) => {
   return { current, next, day, todayBlocks }
 }
 
+const getCourseOptions = (offering, myCourses, schedule) => {
+  if (offering && myCourses.length) {
+    return myCourses
+      .map(code => ({ code, name: offering.courses[code]?.name || code }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+  }
+  const map = new Map()
+  schedule.forEach(b => {
+    if (b.courseCode && !map.has(b.courseCode)) {
+      map.set(b.courseCode, { code: b.courseCode, name: b.courseName || b.subject })
+    }
+  })
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'es'))
+}
+
+const UNIVERSITY_EVENT_TYPES = new Set(['control', 'solemne', 'tarea'])
+
 const normalizeSubject = (s) =>
   s.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
 
@@ -351,23 +368,26 @@ function GoalsTab({ goals, setGoals, selectedGoal, setSelectedGoal, showGoalForm
 }
 
 // ─── Event Form ───────────────────────────────────────────────────────────────
-function EventForm({ onSave, onClose, schedule }) {
+function EventForm({ onSave, onClose, schedule, courseOptions }) {
   const [title, setTitle] = useState('')
   const [type, setType] = useState('control')
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
   const [duration, setDuration] = useState(60)
   const [desc, setDesc] = useState('')
-  const [subject, setSubject] = useState('')
+  const [courseCode, setCourseCode] = useState('')
   const [autoSlot, setAutoSlot] = useState(null)
   const [timeManual, setTimeManual] = useState(false)
 
+  const isUniversity = UNIVERSITY_EVENT_TYPES.has(type)
+  const selectedCourse = courseOptions.find(c => c.code === courseCode)
+
   useEffect(() => {
-    if (timeManual || !date || !subject.trim()) {
-      if (!subject.trim() || !date) setAutoSlot(null)
+    if (!isUniversity || timeManual || !date || !courseCode) {
+      if (!isUniversity || !courseCode || !date) setAutoSlot(null)
       return
     }
-    const slot = findScheduleSlot(schedule, date, subject)
+    const slot = findScheduleSlot(schedule, date, selectedCourse?.name || courseCode)
     if (slot) {
       setAutoSlot(slot)
       setTime(slot.startTime)
@@ -375,58 +395,103 @@ function EventForm({ onSave, onClose, schedule }) {
     } else {
       setAutoSlot(null)
     }
-  }, [date, subject, schedule, timeManual])
+  }, [date, courseCode, schedule, timeManual, isUniversity, selectedCourse])
 
   const handleSave = () => {
     if (!title.trim() || !date) return
-    const fullTitle = subject.trim() ? `${title.trim()} — ${subject.trim()}` : title.trim()
-    onSave({
-      id: uid(), title: fullTitle, type, date, time, duration, description: desc,
-      subject: subject.trim(), synced: false, fromSchedule: !!autoSlot, createdAt: Date.now(),
-    })
+    if (isUniversity && !courseCode) return
+
+    if (isUniversity) {
+      const name = selectedCourse?.name || courseCode
+      onSave({
+        id: uid(), title: `${title.trim()} — ${name}`, type, date, time, duration, description: desc,
+        subject: name, courseCode, synced: false, fromSchedule: !!autoSlot, isPersonal: false,
+        createdAt: Date.now(),
+      })
+    } else {
+      onSave({
+        id: uid(), title: title.trim(), type, date, time, duration, description: desc,
+        subject: '', courseCode: '', synced: false, fromSchedule: false, isPersonal: true,
+        createdAt: Date.now(),
+      })
+    }
   }
+
+  const canSave = title.trim() && date && (!isUniversity || courseCode)
 
   return (
     <div style={{ background: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, border: '1px solid #EAEAF0' }}>
       <p style={{ fontWeight: 700, fontSize: 15, color: '#1A1A2E', marginBottom: 12 }}>Nuevo evento</p>
       <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
         {Object.entries(TYPE_CFG).map(([id, cfg]) => (
-          <button key={id} onClick={() => setType(id)} style={{
+          <button key={id} onClick={() => {
+            setType(id)
+            setTimeManual(false)
+            if (id === 'otro') { setCourseCode(''); setAutoSlot(null) }
+          }} style={{
             flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
             background: type === id ? '#7F77DD' : '#F0F0F7',
             color: type === id ? '#fff' : '#888',
           }}>{cfg.label}</button>
         ))}
       </div>
-      <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Control 1 *" style={inputSt} />
-      <input value={subject} onChange={e => { setSubject(e.target.value); setTimeManual(false) }}
-        placeholder="Asignatura * (ej: Cálculo)" style={{ ...inputSt, marginTop: 8 }} />
-      <input type="date" value={date} onChange={e => { setDate(e.target.value); setTimeManual(false) }} style={{ ...inputSt, marginTop: 8 }} />
+      <input value={title} onChange={e => setTitle(e.target.value)}
+        placeholder={isUniversity ? 'Ej: Control 1, Solemne... *' : 'Ej: Cita, reunión, trámite... *'} style={inputSt} />
 
-      {autoSlot && (
-        <div style={{
-          marginTop: 8, padding: '10px 12px', borderRadius: 10,
-          background: '#E0F5EE', border: '1px solid #7DD4B5', fontSize: 12, color: '#0B5C40',
-        }}>
-          <strong>Horario detectado:</strong> {DAY_NAMES[autoSlot.day]} {autoSlot.startTime}–{autoSlot.endTime}
-          {autoSlot.location && ` · ${autoSlot.location}`}
-        </div>
-      )}
+      {isUniversity ? (
+        <>
+          <select value={courseCode} onChange={e => { setCourseCode(e.target.value); setTimeManual(false) }}
+            style={{ ...inputSt, marginTop: 8 }}>
+            <option value="">— Selecciona ramo —</option>
+            {courseOptions.map(c => (
+              <option key={c.code} value={c.code}>{c.name} ({c.code})</option>
+            ))}
+          </select>
+          {courseOptions.length === 0 && (
+            <p style={{ marginTop: 8, fontSize: 12, color: '#D85A30', lineHeight: 1.4 }}>
+              Agrega ramos en <strong>Config</strong> para vincular controles y solemnes a tu horario.
+            </p>
+          )}
+          <input type="date" value={date} onChange={e => { setDate(e.target.value); setTimeManual(false) }} style={{ ...inputSt, marginTop: 8 }} />
 
-      {subject.trim() && date && !autoSlot && schedule.length > 0 && (
-        <p style={{ marginTop: 8, fontSize: 12, color: '#D85A30', lineHeight: 1.4 }}>
-          No hay clase de «{subject}» ese día. Revisa tu horario o ajusta la hora manualmente.
-        </p>
-      )}
+          {autoSlot && (
+            <div style={{
+              marginTop: 8, padding: '10px 12px', borderRadius: 10,
+              background: '#E0F5EE', border: '1px solid #7DD4B5', fontSize: 12, color: '#0B5C40',
+            }}>
+              <strong>Horario del ramo:</strong> {DAY_NAMES[autoSlot.day]} {autoSlot.startTime}–{autoSlot.endTime}
+              {autoSlot.professor && ` · ${autoSlot.professor.split(' ').slice(0, 2).join(' ')}`}
+            </div>
+          )}
 
-      {subject.trim() && date && !autoSlot && schedule.length === 0 && (
-        <p style={{ marginTop: 8, fontSize: 12, color: '#888', lineHeight: 1.4 }}>
-          Configura tu horario en la pestaña Horario para auto-asignar la hora.
-        </p>
+          {courseCode && date && !autoSlot && schedule.length > 0 && (
+            <p style={{ marginTop: 8, fontSize: 12, color: '#D85A30', lineHeight: 1.4 }}>
+              No hay clase de «{selectedCourse?.name}» ese día. Ajusta la hora manualmente.
+            </p>
+          )}
+
+          {courseCode && date && !autoSlot && schedule.length === 0 && (
+            <p style={{ marginTop: 8, fontSize: 12, color: '#888', lineHeight: 1.4 }}>
+              Genera tu horario en <strong>Config</strong> para auto-asignar la hora del ramo.
+            </p>
+          )}
+        </>
+      ) : (
+        <>
+          <div style={{
+            marginTop: 8, padding: '10px 12px', borderRadius: 10,
+            background: '#F5F5FA', border: '1px solid #E8E8F0', fontSize: 12, color: '#666', lineHeight: 1.5,
+          }}>
+            Evento personal — fuera de la universidad. Elige fecha y hora libremente.
+          </div>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ ...inputSt, marginTop: 8 }} />
+        </>
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-        <input type="time" value={time} onChange={e => { setTime(e.target.value); setTimeManual(true); setAutoSlot(null) }} style={inputSt} />
+        <input type="time" value={time}
+          onChange={e => { setTime(e.target.value); if (isUniversity) { setTimeManual(true); setAutoSlot(null) } }}
+          style={inputSt} />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#888' }}>
           {time ? `${duration} min` : 'Sin hora'}
         </div>
@@ -436,14 +501,14 @@ function EventForm({ onSave, onClose, schedule }) {
           Duración: <strong style={{ color: '#5238C4' }}>{duration} min</strong>
         </label>
         <input type="range" min={15} max={240} step={15} value={duration}
-          onChange={e => { setDuration(+e.target.value); setTimeManual(true) }} />
+          onChange={e => { setDuration(+e.target.value); if (isUniversity) setTimeManual(true) }} />
       </div>
       <textarea value={desc} onChange={e => setDesc(e.target.value)}
-        placeholder="Notas: sala, temas a estudiar..." rows={2}
+        placeholder={isUniversity ? 'Notas: sala, temas a estudiar...' : 'Notas del evento...'} rows={2}
         style={{ ...inputSt, resize: 'vertical', marginTop: 8, lineHeight: 1.5 }} />
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button onClick={handleSave} disabled={!title.trim() || !date || !subject.trim()}
-          style={{ ...primaryBtn, opacity: title.trim() && date && subject.trim() ? 1 : 0.5 }}>
+        <button onClick={handleSave} disabled={!canSave}
+          style={{ ...primaryBtn, opacity: canSave ? 1 : 0.5 }}>
           Crear evento
         </button>
         <button onClick={onClose} style={secondaryBtn}>Cancelar</button>
@@ -473,6 +538,11 @@ function EventCard({ ev, onSync, onDelete, gToken, past }) {
             {ev.fromSchedule && (
               <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: '#E0F5EE', color: '#0B5C40', fontWeight: 600 }}>
                 Horario
+              </span>
+            )}
+            {(ev.type === 'otro' || ev.isPersonal) && (
+              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: '#F5F5FA', color: '#666', fontWeight: 600 }}>
+                Personal
               </span>
             )}
             {daysUntil !== null && daysUntil <= 7 && daysUntil >= 0 && (
@@ -1037,7 +1107,7 @@ function ScheduleTab({ schedule, setSchedule, showScheduleForm, setShowScheduleF
 }
 
 // ─── Calendar Tab ─────────────────────────────────────────────────────────────
-function CalendarTab({ events, setEvents, schedule, gToken, connectGoogle, disconnectGoogle, pushToGCal, showToast, showEventForm, setShowEventForm }) {
+function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, connectGoogle, disconnectGoogle, pushToGCal, showToast, showEventForm, setShowEventForm }) {
   const now = new Date()
   const upcoming = [...events].filter(e => new Date(e.date + 'T23:59') >= now).sort((a, b) => new Date(a.date) - new Date(b.date))
   const past = [...events].filter(e => new Date(e.date + 'T23:59') < now).sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -1074,6 +1144,7 @@ function CalendarTab({ events, setEvents, schedule, gToken, connectGoogle, disco
       {showEventForm && (
         <EventForm
           schedule={schedule}
+          courseOptions={courseOptions}
           onSave={ev => { setEvents(p => [ev, ...p]); setShowEventForm(false); showToast('Evento creado ✓') }}
           onClose={() => setShowEventForm(false)}
         />
@@ -1259,6 +1330,8 @@ export default function App() {
     else if (tab === 'schedule') setShowScheduleForm(true)
   }
 
+  const courseOptions = getCourseOptions(offering, myCourses, schedule)
+
   return (
     <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", maxWidth: 480, margin: '0 auto', minHeight: '100vh', background: '#F8F7FC' }}>
 
@@ -1313,8 +1386,8 @@ export default function App() {
             sectionSelections={sectionSelections} setSectionSelections={setSectionSelections}
             showToast={showToast} onScheduleGenerated={() => setTab('schedule')} />
         ) : (
-          <CalendarTab events={events} setEvents={setEvents} schedule={schedule} gToken={gToken}
-            connectGoogle={connectGoogle} disconnectGoogle={disconnectGoogle} pushToGCal={pushToGCal}
+          <CalendarTab events={events} setEvents={setEvents} schedule={schedule} courseOptions={courseOptions}
+            gToken={gToken} connectGoogle={connectGoogle} disconnectGoogle={disconnectGoogle} pushToGCal={pushToGCal}
             showToast={showToast} showEventForm={showEventForm} setShowEventForm={setShowEventForm} />
         )}
       </div>
