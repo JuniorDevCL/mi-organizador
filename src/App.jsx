@@ -1107,7 +1107,7 @@ function ScheduleTab({ schedule, setSchedule, showScheduleForm, setShowScheduleF
 }
 
 // ─── Calendar Tab ─────────────────────────────────────────────────────────────
-function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, connectGoogle, disconnectGoogle, pushToGCal, showToast, showEventForm, setShowEventForm }) {
+function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, connectGoogle, disconnectGoogle, pushToGCal, saveEvent, showToast, showEventForm, setShowEventForm }) {
   const now = new Date()
   const upcoming = [...events].filter(e => new Date(e.date + 'T23:59') >= now).sort((a, b) => new Date(a.date) - new Date(b.date))
   const past = [...events].filter(e => new Date(e.date + 'T23:59') < now).sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -1127,7 +1127,7 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
             {gToken ? 'Google Calendar conectado' : 'Conectar Google Calendar'}
           </p>
           <p style={{ marginTop: 2, fontSize: 11, color: gToken ? '#1D9E75' : '#7F77DD' }}>
-            {gToken ? 'Sincroniza tus eventos con un toque' : 'Vincula tu agenda universitaria'}
+            {gToken ? 'Los eventos nuevos se sincronizan solos' : 'Conecta para sincronizar automáticamente'}
           </p>
         </div>
         {gToken ? (
@@ -1145,7 +1145,7 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
         <EventForm
           schedule={schedule}
           courseOptions={courseOptions}
-          onSave={ev => { setEvents(p => [ev, ...p]); setShowEventForm(false); showToast('Evento creado ✓') }}
+          onSave={saveEvent}
           onClose={() => setShowEventForm(false)}
         />
       )}
@@ -1275,43 +1275,66 @@ export default function App() {
     showToast('Sesión de Google cerrada')
   }
 
-  const pushToGCal = async (ev) => {
-    if (!gapiReady || !gToken) { showToast('Conecta Google Calendar primero', 'warn'); return }
-    try {
-      const cfg = TYPE_CFG[ev.type] || TYPE_CFG.otro
-      const startDT = `${ev.date}T${ev.time || '08:00'}:00`
-      const start = new Date(startDT)
-      const end = new Date(start.getTime() + (ev.duration || 60) * 60000)
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const insertEventToGCal = async (ev) => {
+    const cfg = TYPE_CFG[ev.type] || TYPE_CFG.otro
+    const startDT = `${ev.date}T${ev.time || '08:00'}:00`
+    const start = new Date(startDT)
+    const end = new Date(start.getTime() + (ev.duration || 60) * 60000)
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-      await window.gapi.client.calendar.events.insert({
-        calendarId: 'primary',
-        resource: {
-          summary: ev.title,
-          description: ev.description || '',
-          start: { dateTime: start.toISOString(), timeZone: tz },
-          end: { dateTime: end.toISOString(), timeZone: tz },
-          colorId: cfg.gcalColor,
-          reminders: {
-            useDefault: false,
-            overrides: [
-              { method: 'popup', minutes: 1440 },
-              { method: 'popup', minutes: 60 },
-            ],
-          },
+    await window.gapi.client.calendar.events.insert({
+      calendarId: 'primary',
+      resource: {
+        summary: ev.title,
+        description: ev.description || '',
+        start: { dateTime: start.toISOString(), timeZone: tz },
+        end: { dateTime: end.toISOString(), timeZone: tz },
+        colorId: cfg.gcalColor,
+        reminders: {
+          useDefault: false,
+          overrides: [
+            { method: 'popup', minutes: 1440 },
+            { method: 'popup', minutes: 60 },
+          ],
         },
-      })
+      },
+    })
+  }
 
+  const pushToGCal = async (ev, { quiet = false } = {}) => {
+    if (!gapiReady || !gToken) {
+      if (!quiet) showToast('Conecta Google Calendar primero', 'warn')
+      return false
+    }
+    try {
+      await insertEventToGCal(ev)
       setEvents(prev => prev.map(e => e.id === ev.id ? { ...e, synced: true } : e))
-      showToast('Evento agregado a Google Calendar ✓')
+      if (!quiet) showToast('Evento agregado a Google Calendar ✓')
+      return true
     } catch (err) {
       if (err.status === 401) {
         setGToken(null)
         LS.set('g_access_token', null)
         showToast('Sesión expirada, vuelve a conectar', 'warn')
-      } else {
+      } else if (!quiet) {
         showToast('Error al sincronizar: ' + (err.message || err.status), 'err')
       }
+      return false
+    }
+  }
+
+  const saveEvent = async (ev) => {
+    setEvents(prev => [ev, ...prev])
+    setShowEventForm(false)
+
+    if (gapiReady && gToken) {
+      const ok = await pushToGCal(ev, { quiet: true })
+      showToast(
+        ok ? 'Evento creado y agregado a Google Calendar ✓' : 'Evento creado. No se pudo sincronizar con Google',
+        ok ? 'ok' : 'warn',
+      )
+    } else {
+      showToast('Evento creado ✓')
     }
   }
 
@@ -1387,7 +1410,8 @@ export default function App() {
             showToast={showToast} onScheduleGenerated={() => setTab('schedule')} />
         ) : (
           <CalendarTab events={events} setEvents={setEvents} schedule={schedule} courseOptions={courseOptions}
-            gToken={gToken} connectGoogle={connectGoogle} disconnectGoogle={disconnectGoogle} pushToGCal={pushToGCal}
+            gToken={gToken} connectGoogle={connectGoogle} disconnectGoogle={disconnectGoogle}
+            pushToGCal={pushToGCal} saveEvent={saveEvent}
             showToast={showToast} showEventForm={showEventForm} setShowEventForm={setShowEventForm} />
         )}
       </div>
