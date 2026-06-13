@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   parseAcademicOffering,
-  applyOfferingToSchedule,
+  syncOfferingSchedule,
   shortEventType,
 } from './offeringParser'
 
@@ -741,16 +741,23 @@ function ConfigTab({
   }
 
   const removeCourse = (code) => {
-    setMyCourses(prev => prev.filter(c => c !== code))
-    setSectionSelections(prev => {
-      const next = { ...prev }
-      delete next[code]
-      return next
-    })
+    const nextCourses = myCourses.filter(c => c !== code)
+    const nextSelections = { ...sectionSelections }
+    delete nextSelections[code]
+    setMyCourses(nextCourses)
+    setSectionSelections(nextSelections)
+    if (offering) {
+      setSchedule(prev => syncOfferingSchedule(offering, nextCourses, nextSelections, prev))
+    }
+    showToast('Ramo eliminado del horario')
   }
 
   const handleSectionChange = (code, section) => {
-    setSectionSelections(prev => ({ ...prev, [code]: section }))
+    const nextSelections = { ...sectionSelections, [code]: section }
+    setSectionSelections(nextSelections)
+    if (offering && myCourses.includes(code)) {
+      setSchedule(prev => syncOfferingSchedule(offering, myCourses, nextSelections, prev))
+    }
   }
 
   const applySections = () => {
@@ -763,7 +770,7 @@ function ConfigTab({
     if (pending.length) {
       showToast(`${pending.length} ramo(s) sin sección — se omitirán`, 'warn')
     }
-    const next = applyOfferingToSchedule(offering, selections, schedule)
+    const next = syncOfferingSchedule(offering, myCourses, sectionSelections, schedule)
     setSchedule(next)
     showToast(`Horario generado (${next.filter(b => b.fromOffering).length} bloques) ✓`)
     onScheduleGenerated?.()

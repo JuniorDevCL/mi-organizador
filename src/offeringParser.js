@@ -160,6 +160,13 @@ export const applyOfferingToSchedule = (offering, selections, currentSchedule) =
   return [...manual, ...fromOffering].sort((a, b) => a.day - b.day || a.startTime.localeCompare(b.startTime))
 }
 
+export const syncOfferingSchedule = (offering, myCourses, sectionSelections, currentSchedule) => {
+  const selections = Object.fromEntries(
+    myCourses.filter(code => sectionSelections[code]).map(code => [code, sectionSelections[code]])
+  )
+  return applyOfferingToSchedule(offering, selections, currentSchedule)
+}
+
 export const shortEventType = (t = '') => {
   const u = t.toUpperCase()
   if (u.includes('CATEDRA')) return 'Cátedra'
