@@ -31,6 +31,30 @@ const TYPE_CFG = {
   otro:    { label: 'Otro',    bg: '#EDE9FF', text: '#4A3F8A', border: '#C4B8F5', gcalColor: '1' },
 }
 
+const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+
+const normalizeSubject = (s) =>
+  s.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+
+const matchSubject = (a, b) => {
+  const x = normalizeSubject(a)
+  const y = normalizeSubject(b)
+  if (!x || !y) return false
+  return x.includes(y) || y.includes(x)
+}
+
+const slotDuration = (startTime, endTime) => {
+  const [sh, sm] = startTime.split(':').map(Number)
+  const [eh, em] = endTime.split(':').map(Number)
+  return (eh * 60 + em) - (sh * 60 + sm)
+}
+
+const findScheduleSlot = (schedule, dateStr, subject) => {
+  if (!dateStr || !subject.trim() || !schedule.length) return null
+  const day = new Date(dateStr + 'T12:00:00').getDay()
+  return schedule.find(s => s.day === day && matchSubject(subject, s.subject)) || null
+}
+
 // ─── Icon ─────────────────────────────────────────────────────────────────────
 const Icon = ({ name, size = 20 }) => {
   const icons = {
@@ -47,6 +71,7 @@ const Icon = ({ name, size = 20 }) => {
     google:   <><path d="M20.283 10.356h-8.327v3.451h4.792c-.446 2.193-2.313 3.453-4.792 3.453a5.27 5.27 0 0 1-5.279-5.28 5.27 5.27 0 0 1 5.279-5.279c1.259 0 2.397.447 3.29 1.178l2.6-2.599c-1.584-1.381-3.615-2.233-5.89-2.233a8.908 8.908 0 0 0-8.934 8.934 8.907 8.907 0 0 0 8.934 8.934c4.467 0 8.529-3.249 8.529-8.934 0-.528-.081-1.097-.202-1.625z"/></>,
     back:     <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12,19 5,12 12,5"/></>,
     logout:   <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
+    book:     <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>,
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -87,13 +112,6 @@ const ProgressBar = ({ value }) => (
 function GoalForm({ onSave, onClose, colorIdx }) {
   const [title, setTitle] = useState('')
   const [desc, setDesc] = useState('')
-  const [tag, setTag] = useState('')
-  const [tags, setTags] = useState([])
-  const [deadline, setDeadline] = useState('')
-
-  const addTag = () => {
-    if (tag.trim() && tags.length < 5) { setTags(p => [...p, tag.trim()]); setTag('') }
-  }
 
   return (
     <div style={{ background: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, border: '1px solid #EAEAF0' }}>
@@ -101,25 +119,8 @@ function GoalForm({ onSave, onClose, colorIdx }) {
       <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Nombre del objetivo *" style={inputSt} />
       <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="Descripción (opcional)" rows={2}
         style={{ ...inputSt, resize: 'vertical', marginTop: 8, lineHeight: 1.5 }} />
-      <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} style={{ ...inputSt, marginTop: 8 }} />
-      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-        <input value={tag} onChange={e => setTag(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
-          placeholder="Etiqueta (enter para agregar)" style={{ ...inputSt, flex: 1 }} />
-        <button onClick={addTag} style={{ ...secondaryBtn, padding: '10px 14px' }}>+</button>
-      </div>
-      {tags.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-          {tags.map((t, i) => (
-            <span key={i} onClick={() => setTags(p => p.filter((_, j) => j !== i))}
-              style={{ fontSize: 12, padding: '3px 10px', borderRadius: 99, background: TAG_COLORS[i % TAG_COLORS.length] + '22', color: TAG_COLORS[i % TAG_COLORS.length], fontWeight: 600, cursor: 'pointer' }}>
-              {t} ×
-            </span>
-          ))}
-        </div>
-      )}
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button onClick={() => { if (title.trim()) onSave({ id: uid(), title, desc, tags, deadline, notes: [], colorIdx, createdAt: Date.now() }) }}
+        <button onClick={() => { if (title.trim()) onSave({ id: uid(), title, desc, notes: [], colorIdx, createdAt: Date.now() }) }}
           style={{ ...primaryBtn, opacity: title.trim() ? 1 : 0.5 }}>
           Crear objetivo
         </button>
@@ -177,12 +178,6 @@ function GoalDetail({ goal, setGoals, setSelectedGoal, showToast }) {
             <Icon name="trash" size={16} />
           </button>
         </div>
-        {goal.deadline && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 8, color: c.text, opacity: 0.7, fontSize: 12 }}>
-            <Icon name="clock" size={13} />
-            Meta: {new Date(goal.deadline + 'T00:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })}
-          </div>
-        )}
         <div style={{ marginTop: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
             <span style={{ fontSize: 12, color: c.text, fontWeight: 500 }}>{done}/{total} avances</span>
@@ -190,13 +185,6 @@ function GoalDetail({ goal, setGoals, setSelectedGoal, showToast }) {
           </div>
           <ProgressBar value={pct} />
         </div>
-        {goal.tags?.length > 0 && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-            {goal.tags.map((tag, ti) => (
-              <span key={ti} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 99, background: 'rgba(255,255,255,0.55)', color: c.text, fontWeight: 600 }}>{tag}</span>
-            ))}
-          </div>
-        )}
       </div>
 
       <div style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 16, border: '1px solid #EAEAF0' }}>
@@ -300,19 +288,6 @@ function GoalsTab({ goals, setGoals, selectedGoal, setSelectedGoal, showGoalForm
                 <div style={{ color: '#DDD', marginTop: 4 }}><Icon name="chevron" size={16} /></div>
               </div>
               <ProgressBar value={pct} />
-              {goal.deadline && (
-                <p style={{ marginTop: 8, fontSize: 11, color: '#AAA', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Icon name="clock" size={11} />
-                  Meta: {new Date(goal.deadline + 'T00:00:00').toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </p>
-              )}
-              {goal.tags?.length > 0 && (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 9 }}>
-                  {goal.tags.map((tag, ti) => (
-                    <span key={ti} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: TAG_COLORS[ti % TAG_COLORS.length] + '18', color: TAG_COLORS[ti % TAG_COLORS.length], fontWeight: 600 }}>{tag}</span>
-                  ))}
-                </div>
-              )}
             </div>
           )
         })}
@@ -322,7 +297,7 @@ function GoalsTab({ goals, setGoals, selectedGoal, setSelectedGoal, showGoalForm
 }
 
 // ─── Event Form ───────────────────────────────────────────────────────────────
-function EventForm({ onSave, onClose }) {
+function EventForm({ onSave, onClose, schedule }) {
   const [title, setTitle] = useState('')
   const [type, setType] = useState('control')
   const [date, setDate] = useState('')
@@ -330,11 +305,31 @@ function EventForm({ onSave, onClose }) {
   const [duration, setDuration] = useState(60)
   const [desc, setDesc] = useState('')
   const [subject, setSubject] = useState('')
+  const [autoSlot, setAutoSlot] = useState(null)
+  const [timeManual, setTimeManual] = useState(false)
+
+  useEffect(() => {
+    if (timeManual || !date || !subject.trim()) {
+      if (!subject.trim() || !date) setAutoSlot(null)
+      return
+    }
+    const slot = findScheduleSlot(schedule, date, subject)
+    if (slot) {
+      setAutoSlot(slot)
+      setTime(slot.startTime)
+      setDuration(slotDuration(slot.startTime, slot.endTime))
+    } else {
+      setAutoSlot(null)
+    }
+  }, [date, subject, schedule, timeManual])
 
   const handleSave = () => {
     if (!title.trim() || !date) return
     const fullTitle = subject.trim() ? `${title.trim()} — ${subject.trim()}` : title.trim()
-    onSave({ id: uid(), title: fullTitle, type, date, time, duration, description: desc, synced: false, createdAt: Date.now() })
+    onSave({
+      id: uid(), title: fullTitle, type, date, time, duration, description: desc,
+      subject: subject.trim(), synced: false, fromSchedule: !!autoSlot, createdAt: Date.now(),
+    })
   }
 
   return (
@@ -349,24 +344,52 @@ function EventForm({ onSave, onClose }) {
           }}>{cfg.label}</button>
         ))}
       </div>
-      <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Título del evento *" style={inputSt} />
-      <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Asignatura (opcional)" style={{ ...inputSt, marginTop: 8 }} />
+      <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Ej: Control 1 *" style={inputSt} />
+      <input value={subject} onChange={e => { setSubject(e.target.value); setTimeManual(false) }}
+        placeholder="Asignatura * (ej: Cálculo)" style={{ ...inputSt, marginTop: 8 }} />
+      <input type="date" value={date} onChange={e => { setDate(e.target.value); setTimeManual(false) }} style={{ ...inputSt, marginTop: 8 }} />
+
+      {autoSlot && (
+        <div style={{
+          marginTop: 8, padding: '10px 12px', borderRadius: 10,
+          background: '#E0F5EE', border: '1px solid #7DD4B5', fontSize: 12, color: '#0B5C40',
+        }}>
+          <strong>Horario detectado:</strong> {DAY_NAMES[autoSlot.day]} {autoSlot.startTime}–{autoSlot.endTime}
+          {autoSlot.location && ` · ${autoSlot.location}`}
+        </div>
+      )}
+
+      {subject.trim() && date && !autoSlot && schedule.length > 0 && (
+        <p style={{ marginTop: 8, fontSize: 12, color: '#D85A30', lineHeight: 1.4 }}>
+          No hay clase de «{subject}» ese día. Revisa tu horario o ajusta la hora manualmente.
+        </p>
+      )}
+
+      {subject.trim() && date && !autoSlot && schedule.length === 0 && (
+        <p style={{ marginTop: 8, fontSize: 12, color: '#888', lineHeight: 1.4 }}>
+          Configura tu horario en la pestaña Horario para auto-asignar la hora.
+        </p>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputSt} />
-        <input type="time" value={time} onChange={e => setTime(e.target.value)} style={inputSt} />
+        <input type="time" value={time} onChange={e => { setTime(e.target.value); setTimeManual(true); setAutoSlot(null) }} style={inputSt} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#888' }}>
+          {time ? `${duration} min` : 'Sin hora'}
+        </div>
       </div>
       <div style={{ marginTop: 10 }}>
         <label style={{ fontSize: 12, color: '#888', fontWeight: 500 }}>
           Duración: <strong style={{ color: '#5238C4' }}>{duration} min</strong>
         </label>
-        <input type="range" min={15} max={240} step={15} value={duration} onChange={e => setDuration(+e.target.value)} />
+        <input type="range" min={15} max={240} step={15} value={duration}
+          onChange={e => { setDuration(+e.target.value); setTimeManual(true) }} />
       </div>
       <textarea value={desc} onChange={e => setDesc(e.target.value)}
         placeholder="Notas: sala, temas a estudiar..." rows={2}
         style={{ ...inputSt, resize: 'vertical', marginTop: 8, lineHeight: 1.5 }} />
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button onClick={handleSave} disabled={!title.trim() || !date}
-          style={{ ...primaryBtn, opacity: title.trim() && date ? 1 : 0.5 }}>
+        <button onClick={handleSave} disabled={!title.trim() || !date || !subject.trim()}
+          style={{ ...primaryBtn, opacity: title.trim() && date && subject.trim() ? 1 : 0.5 }}>
           Crear evento
         </button>
         <button onClick={onClose} style={secondaryBtn}>Cancelar</button>
@@ -393,6 +416,11 @@ function EventCard({ ev, onSync, onDelete, gToken, past }) {
               {new Date(ev.date + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' })}
             </span>
             {ev.time && <span style={{ fontSize: 12, color: '#888' }}>· {ev.time}h</span>}
+            {ev.fromSchedule && (
+              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: '#E0F5EE', color: '#0B5C40', fontWeight: 600 }}>
+                Horario
+              </span>
+            )}
             {daysUntil !== null && daysUntil <= 7 && daysUntil >= 0 && (
               <span style={{
                 fontSize: 11, padding: '2px 8px', borderRadius: 99, fontWeight: 700,
@@ -442,8 +470,132 @@ function EventCard({ ev, onSync, onDelete, gToken, past }) {
   )
 }
 
+// ─── Schedule Form ────────────────────────────────────────────────────────────
+function ScheduleForm({ onSave, onClose }) {
+  const [subject, setSubject] = useState('')
+  const [day, setDay] = useState(1)
+  const [startTime, setStartTime] = useState('08:30')
+  const [endTime, setEndTime] = useState('10:00')
+  const [location, setLocation] = useState('')
+
+  const handleSave = () => {
+    if (!subject.trim() || !startTime || !endTime) return
+    if (startTime >= endTime) return
+    onSave({ id: uid(), subject: subject.trim(), day: +day, startTime, endTime, location: location.trim() })
+  }
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, border: '1px solid #EAEAF0' }}>
+      <p style={{ fontWeight: 700, fontSize: 15, color: '#1A1A2E', marginBottom: 12 }}>Agregar clase al horario</p>
+      <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Asignatura * (ej: Cálculo)" style={inputSt} />
+      <select value={day} onChange={e => setDay(e.target.value)} style={{ ...inputSt, marginTop: 8 }}>
+        {[1, 2, 3, 4, 5, 6].map(d => (
+          <option key={d} value={d}>{DAY_NAMES[d]}</option>
+        ))}
+      </select>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+        <div>
+          <label style={{ fontSize: 11, color: '#888', fontWeight: 600 }}>Inicio</label>
+          <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} style={{ ...inputSt, marginTop: 4 }} />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: '#888', fontWeight: 600 }}>Fin</label>
+          <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} style={{ ...inputSt, marginTop: 4 }} />
+        </div>
+      </div>
+      <input value={location} onChange={e => setLocation(e.target.value)} placeholder="Sala (opcional)" style={{ ...inputSt, marginTop: 8 }} />
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button onClick={handleSave}
+          disabled={!subject.trim() || startTime >= endTime}
+          style={{ ...primaryBtn, opacity: subject.trim() && startTime < endTime ? 1 : 0.5 }}>
+          Agregar al horario
+        </button>
+        <button onClick={onClose} style={secondaryBtn}>Cancelar</button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Schedule Tab ─────────────────────────────────────────────────────────────
+function ScheduleTab({ schedule, setSchedule, showScheduleForm, setShowScheduleForm, showToast }) {
+  const byDay = [1, 2, 3, 4, 5, 6].map(day => ({
+    day,
+    blocks: schedule.filter(s => s.day === day).sort((a, b) => a.startTime.localeCompare(b.startTime)),
+  })).filter(d => d.blocks.length > 0)
+
+  return (
+    <div>
+      <div style={{
+        background: '#EDE9FF', borderRadius: 14, padding: '12px 14px', marginBottom: 16,
+        border: '1px solid #C4B8F5', fontSize: 12, color: '#4A3F8A', lineHeight: 1.5,
+      }}>
+        Configura tus clases semanales. Al crear un control o solemne, la app buscará la hora según la asignatura y el día.
+      </div>
+
+      {showScheduleForm && (
+        <ScheduleForm
+          onSave={entry => {
+            setSchedule(p => [...p, entry].sort((a, b) => a.day - b.day || a.startTime.localeCompare(b.startTime)))
+            setShowScheduleForm(false)
+            showToast('Clase agregada al horario ✓')
+          }}
+          onClose={() => setShowScheduleForm(false)}
+        />
+      )}
+
+      {schedule.length === 0 && !showScheduleForm && (
+        <div style={{ textAlign: 'center', padding: '48px 0' }}>
+          <div style={{ width: 60, height: 60, borderRadius: 18, background: '#E0F5EE', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', color: '#1D9E75' }}>
+            <Icon name="book" size={28} />
+          </div>
+          <p style={{ fontWeight: 700, fontSize: 16, color: '#1A1A2E' }}>Sin horario configurado</p>
+          <p style={{ marginTop: 6, fontSize: 13, color: '#AAA', lineHeight: 1.6 }}>
+            Agrega tus ramos y horarios<br />para auto-asignar controles y solemnes.
+          </p>
+        </div>
+      )}
+
+      {byDay.map(({ day, blocks }) => (
+        <div key={day} style={{ marginBottom: 20 }}>
+          <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#AAA', textTransform: 'uppercase', letterSpacing: 1 }}>
+            {DAY_NAMES[day]}
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {blocks.map(block => (
+              <div key={block.id} style={{
+                background: '#fff', borderRadius: 14, padding: '12px 14px',
+                border: '1px solid #EAEAF0', display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <div style={{
+                  width: 38, height: 38, borderRadius: 11, background: '#E0F5EE',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0B5C40', flexShrink: 0,
+                }}>
+                  <Icon name="book" size={18} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontWeight: 600, fontSize: 14, color: '#1A1A2E' }}>{block.subject}</p>
+                  <p style={{ marginTop: 2, fontSize: 12, color: '#888' }}>
+                    {block.startTime} – {block.endTime}
+                    {block.location && ` · ${block.location}`}
+                  </p>
+                </div>
+                <button onClick={() => {
+                  setSchedule(p => p.filter(s => s.id !== block.id))
+                  showToast('Clase eliminada del horario')
+                }} style={{ background: '#FFF0F0', color: '#D85A30', border: 'none', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
+                  <Icon name="trash" size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Calendar Tab ─────────────────────────────────────────────────────────────
-function CalendarTab({ events, setEvents, gToken, connectGoogle, disconnectGoogle, pushToGCal, showToast, showEventForm, setShowEventForm }) {
+function CalendarTab({ events, setEvents, schedule, gToken, connectGoogle, disconnectGoogle, pushToGCal, showToast, showEventForm, setShowEventForm }) {
   const now = new Date()
   const upcoming = [...events].filter(e => new Date(e.date + 'T23:59') >= now).sort((a, b) => new Date(a.date) - new Date(b.date))
   const past = [...events].filter(e => new Date(e.date + 'T23:59') < now).sort((a, b) => new Date(b.date) - new Date(a.date))
@@ -479,6 +631,7 @@ function CalendarTab({ events, setEvents, gToken, connectGoogle, disconnectGoogl
 
       {showEventForm && (
         <EventForm
+          schedule={schedule}
           onSave={ev => { setEvents(p => [ev, ...p]); setShowEventForm(false); showToast('Evento creado ✓') }}
           onClose={() => setShowEventForm(false)}
         />
@@ -529,9 +682,11 @@ export default function App() {
   const [tab, setTab] = useState('goals')
   const [goals, setGoals] = useState(() => LS.get('app_goals_v3', []))
   const [events, setEvents] = useState(() => LS.get('app_events_v3', []))
+  const [schedule, setSchedule] = useState(() => LS.get('app_schedule_v1', []))
   const [selectedGoal, setSelectedGoal] = useState(null)
   const [showGoalForm, setShowGoalForm] = useState(false)
   const [showEventForm, setShowEventForm] = useState(false)
+  const [showScheduleForm, setShowScheduleForm] = useState(false)
   const [gToken, setGToken] = useState(() => LS.get('g_access_token', null))
   const [gapiReady, setGapiReady] = useState(false)
   const [toast, setToast] = useState(null)
@@ -539,6 +694,7 @@ export default function App() {
 
   useEffect(() => { LS.set('app_goals_v3', goals) }, [goals])
   useEffect(() => { LS.set('app_events_v3', events) }, [events])
+  useEffect(() => { LS.set('app_schedule_v1', schedule) }, [schedule])
 
   const showToast = (msg, type = 'ok') => {
     setToast({ msg, type })
@@ -640,7 +796,20 @@ export default function App() {
     }
   }
 
-  const onTabChange = (t) => { setTab(t); setSelectedGoal(null); setShowGoalForm(false); setShowEventForm(false) }
+  const onTabChange = (t) => {
+    setTab(t)
+    setSelectedGoal(null)
+    setShowGoalForm(false)
+    setShowEventForm(false)
+    setShowScheduleForm(false)
+  }
+
+  const openFab = () => {
+    setSelectedGoal(null)
+    if (tab === 'goals') setShowGoalForm(true)
+    else if (tab === 'calendar') setShowEventForm(true)
+    else setShowScheduleForm(true)
+  }
 
   return (
     <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", maxWidth: 480, margin: '0 auto', minHeight: '100vh', background: '#F8F7FC' }}>
@@ -659,17 +828,21 @@ export default function App() {
       <div style={{ padding: '22px 18px 0', background: '#F8F7FC' }}>
         <p style={{ fontSize: 10, fontWeight: 700, color: '#AAA', letterSpacing: 1.5, textTransform: 'uppercase' }}>Mi Centro</p>
         <h1 style={{ margin: '2px 0 16px', fontSize: 26, fontWeight: 800, color: '#1A1A2E', letterSpacing: -0.8 }}>Organización</h1>
-        <div style={{ display: 'flex', gap: 5, background: '#EDEDF5', borderRadius: 13, padding: 4 }}>
-          {[{ id: 'goals', label: 'Objetivos', icon: 'target' }, { id: 'calendar', label: 'Calendario', icon: 'calendar' }].map(t => (
+        <div style={{ display: 'flex', gap: 4, background: '#EDEDF5', borderRadius: 13, padding: 4 }}>
+          {[
+            { id: 'goals', label: 'Objetivos', icon: 'target' },
+            { id: 'schedule', label: 'Horario', icon: 'book' },
+            { id: 'calendar', label: 'Calendario', icon: 'calendar' },
+          ].map(t => (
             <button key={t.id} onClick={() => onTabChange(t.id)} style={{
-              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              padding: '9px 0', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+              padding: '9px 0', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
               background: tab === t.id ? '#fff' : 'transparent',
               color: tab === t.id ? '#5238C4' : '#999',
               boxShadow: tab === t.id ? '0 1px 6px rgba(0,0,0,0.1)' : 'none',
               transition: 'all 0.18s',
             }}>
-              <Icon name={t.icon} size={15} /> {t.label}
+              <Icon name={t.icon} size={14} /> {t.label}
             </button>
           ))}
         </div>
@@ -679,15 +852,18 @@ export default function App() {
         {tab === 'goals' ? (
           <GoalsTab goals={goals} setGoals={setGoals} selectedGoal={selectedGoal} setSelectedGoal={setSelectedGoal}
             showGoalForm={showGoalForm} setShowGoalForm={setShowGoalForm} showToast={showToast} />
+        ) : tab === 'schedule' ? (
+          <ScheduleTab schedule={schedule} setSchedule={setSchedule}
+            showScheduleForm={showScheduleForm} setShowScheduleForm={setShowScheduleForm} showToast={showToast} />
         ) : (
-          <CalendarTab events={events} setEvents={setEvents} gToken={gToken}
+          <CalendarTab events={events} setEvents={setEvents} schedule={schedule} gToken={gToken}
             connectGoogle={connectGoogle} disconnectGoogle={disconnectGoogle} pushToGCal={pushToGCal}
             showToast={showToast} showEventForm={showEventForm} setShowEventForm={setShowEventForm} />
         )}
       </div>
 
       <button
-        onClick={() => { tab === 'goals' ? setShowGoalForm(true) : setShowEventForm(true); setSelectedGoal(null) }}
+        onClick={openFab}
         style={{
           position: 'fixed', bottom: 24, right: 20,
           width: 54, height: 54, borderRadius: '50%', border: 'none',
