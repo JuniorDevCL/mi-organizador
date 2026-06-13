@@ -18,26 +18,43 @@ export const parseHorario = (raw) => {
 }
 
 const splitLine = (line) => {
-  if (line.includes('\t')) return line.split('\t').map(c => c.trim())
-  const semi = line.split(';')
-  const comma = line.split(',')
-  const delim = semi.length >= comma.length ? ';' : ','
-  return line.split(delim).map(c => c.trim().replace(/^"|"$/g, ''))
+  if (line.includes('\t') && !line.includes('","') && !line.startsWith('"')) {
+    return line.split('\t').map(c => c.trim())
+  }
+  const result = []
+  let cur = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i]
+    if (c === '"') {
+      if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; continue }
+      inQuotes = !inQuotes
+      continue
+    }
+    if ((c === ',' || c === ';') && !inQuotes) {
+      result.push(cur.trim())
+      cur = ''
+      continue
+    }
+    cur += c
+  }
+  result.push(cur.trim())
+  return result
 }
 
 const mapColumns = (headers) => {
   const cols = {}
   headers.forEach((h, i) => {
-    const n = h.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
-    if (n === 'asignatura' || (n.includes('asignatura') && !n.includes('nombre') && !n.includes('credito'))) cols.code = i
+    const n = h.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim()
+    if (n === 'asignatura') cols.code = i
     if (n.includes('nombre') && n.includes('asig')) cols.name = i
     if (n.includes('credito')) cols.credits = i
     if (n.includes('seccion')) cols.section = i
-    if (n.includes('descrp') || (n.includes('evento') && !n.includes('horario'))) cols.event = i
+    if ((n.includes('descrip') || n.includes('descrp')) && n.includes('evento')) cols.event = i
     if (n.includes('horario')) cols.horario = i
     if (n.includes('profesor')) cols.professor = i
     if (n.includes('sede')) cols.campus = i
-    if (n.includes('paquete') && !n.includes('vac') && !n.includes('cat')) cols.package = i
+    if (n.includes('paquete') && !n.includes('vac') && !n.includes('cat') && !n.includes('id')) cols.package = i
   })
   return cols
 }
@@ -96,7 +113,7 @@ export const parseAcademicOffering = (text, fileName = '') => {
   }
 
   const courseList = Object.values(courses)
-  if (!courseList.length) throw new Error('No se encontraron ramos válidos. Exporta el Excel como CSV (separado por ; o tab)')
+  if (!courseList.length) throw new Error('No se encontraron ramos válidos. Verifica que el CSV tenga columnas Asignatura, Sección y Horario.')
 
   return {
     uploadedAt: Date.now(),
