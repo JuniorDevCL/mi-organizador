@@ -48,6 +48,28 @@ const blockColor = (eventType = '') => {
   return { bg: '#EDE9FF', text: '#4A3F8A', border: '#C4B8F5' }
 }
 
+const timeToMins = (t) => {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}
+
+const isBlockNow = (block, now) => {
+  if (block.day !== now.getDay()) return false
+  const mins = now.getHours() * 60 + now.getMinutes()
+  return timeToMins(block.startTime) <= mins && mins < timeToMins(block.endTime)
+}
+
+const getScheduleStatus = (schedule, now) => {
+  const day = now.getDay()
+  const mins = now.getHours() * 60 + now.getMinutes()
+  const todayBlocks = schedule
+    .filter(s => s.day === day)
+    .sort((a, b) => a.startTime.localeCompare(b.startTime))
+  const current = todayBlocks.find(b => timeToMins(b.startTime) <= mins && mins < timeToMins(b.endTime))
+  const next = todayBlocks.find(b => timeToMins(b.startTime) > mins)
+  return { current, next, day, todayBlocks }
+}
+
 const normalizeSubject = (s) =>
   s.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
 
@@ -103,6 +125,7 @@ const Icon = ({ name, size = 20 }) => {
     logout:   <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
     book:     <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>,
     upload:   <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
+    settings: <><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></>,
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -502,7 +525,8 @@ function EventCard({ ev, onSync, onDelete, gToken, past }) {
 }
 
 // ─── Weekly Grid ──────────────────────────────────────────────────────────────
-function WeeklyGrid({ schedule, onRemove }) {
+function WeeklyGrid({ schedule, onRemove, now }) {
+  const today = now.getDay()
   const weekBlocks = WEEK_DAYS.map(day => ({
     day,
     blocks: schedule.filter(s => s.day === day).sort((a, b) => a.startTime.localeCompare(b.startTime)),
@@ -514,11 +538,20 @@ function WeeklyGrid({ schedule, onRemove }) {
 
   const BlockCard = ({ block, compact }) => {
     const c = blockColor(block.eventType)
+    const active = isBlockNow(block, now)
     return (
       <div style={{
-        background: c.bg, border: `1px solid ${c.border}`, borderRadius: 8,
-        padding: compact ? '5px 4px' : '8px 8px', position: 'relative',
+        background: active ? '#fff' : c.bg,
+        border: active ? '2px solid #5238C4' : `1px solid ${c.border}`,
+        borderRadius: 8, padding: compact ? '5px 4px' : '8px 8px', position: 'relative',
+        boxShadow: active ? '0 0 0 3px rgba(82,56,196,0.2)' : 'none',
       }}>
+        {active && (
+          <span style={{
+            position: 'absolute', top: -6, right: 4, background: '#5238C4', color: '#fff',
+            fontSize: 7, fontWeight: 800, padding: '1px 5px', borderRadius: 99, letterSpacing: 0.5,
+          }}>AHORA</span>
+        )}
         {!compact && onRemove && (
           <button type="button" onClick={() => onRemove(block.id)}
             style={{
@@ -529,16 +562,16 @@ function WeeklyGrid({ schedule, onRemove }) {
           </button>
         )}
         <p style={{
-          fontSize: compact ? 9 : 11, fontWeight: 700, color: c.text, lineHeight: 1.25,
+          fontSize: compact ? 9 : 11, fontWeight: 700, color: active ? '#5238C4' : c.text, lineHeight: 1.25,
           paddingRight: compact ? 0 : 14, wordBreak: 'break-word',
         }}>
           {block.subject}
         </p>
-        <p style={{ fontSize: compact ? 8 : 10, color: c.text, opacity: 0.9, marginTop: 3 }}>
+        <p style={{ fontSize: compact ? 8 : 10, color: active ? '#5238C4' : c.text, opacity: 0.9, marginTop: 3 }}>
           {block.startTime}–{block.endTime}
         </p>
         {block.eventType && (
-          <p style={{ fontSize: compact ? 7 : 9, color: c.text, opacity: 0.75, marginTop: 2 }}>
+          <p style={{ fontSize: compact ? 7 : 9, color: active ? '#5238C4' : c.text, opacity: 0.75, marginTop: 2 }}>
             {shortEventType(block.eventType)}
           </p>
         )}
@@ -556,18 +589,24 @@ function WeeklyGrid({ schedule, onRemove }) {
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 5,
       }}>
-        {weekBlocks.map(({ day, blocks }) => (
+        {weekBlocks.map(({ day, blocks }) => {
+          const isToday = day === today
+          return (
           <div key={day} style={{ minWidth: 0 }}>
             <div style={{
               textAlign: 'center', padding: '7px 2px',
-              background: 'linear-gradient(135deg, #8B83E8, #5238C4)',
+              background: isToday
+                ? 'linear-gradient(135deg, #1D9E75, #0B5C40)'
+                : 'linear-gradient(135deg, #8B83E8, #5238C4)',
               color: '#fff', borderRadius: '10px 10px 0 0',
               fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
+              boxShadow: isToday ? '0 2px 8px rgba(29,158,117,0.35)' : 'none',
             }}>
-              {DAY_SHORT[day]}
+              {DAY_SHORT[day]}{isToday ? ' ●' : ''}
             </div>
             <div style={{
-              background: '#FAFAFC', border: '1px solid #E8E8F0', borderTop: 'none',
+              background: isToday ? '#F0FBF7' : '#FAFAFC',
+              border: `1px solid ${isToday ? '#7DD4B5' : '#E8E8F0'}`, borderTop: 'none',
               borderRadius: '0 0 10px 10px', minHeight: 72, padding: 4,
               display: 'flex', flexDirection: 'column', gap: 4,
             }}>
@@ -578,7 +617,7 @@ function WeeklyGrid({ schedule, onRemove }) {
               ))}
             </div>
           </div>
-        ))}
+        )})}
       </div>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
@@ -654,12 +693,11 @@ function ScheduleForm({ onSave, onClose }) {
   )
 }
 
-// ─── Schedule Tab ─────────────────────────────────────────────────────────────
-function ScheduleTab({
+// ─── Config Tab ───────────────────────────────────────────────────────────────
+function ConfigTab({
   schedule, setSchedule, offering, setOffering,
-  myCourses, setMyCourses,
-  sectionSelections, setSectionSelections,
-  showScheduleForm, setShowScheduleForm, showToast,
+  myCourses, setMyCourses, sectionSelections, setSectionSelections,
+  showToast, onScheduleGenerated,
 }) {
   const fileRef = useRef(null)
   const searchRef = useRef(null)
@@ -728,6 +766,7 @@ function ScheduleTab({
     const next = applyOfferingToSchedule(offering, selections, schedule)
     setSchedule(next)
     showToast(`Horario generado (${next.filter(b => b.fromOffering).length} bloques) ✓`)
+    onScheduleGenerated?.()
   }
 
   const clearOffering = () => {
@@ -740,6 +779,13 @@ function ScheduleTab({
 
   return (
     <div>
+      <div style={{
+        background: '#EDE9FF', borderRadius: 14, padding: '12px 14px', marginBottom: 16,
+        border: '1px solid #C4B8F5', fontSize: 12, color: '#4A3F8A', lineHeight: 1.5,
+      }}>
+        Configura tu semestre aquí. Más opciones se agregarán pronto.
+      </div>
+
       <div style={{
         background: '#fff', borderRadius: 14, padding: 14, marginBottom: 16,
         border: '1px solid #EAEAF0',
@@ -880,13 +926,59 @@ function ScheduleTab({
           )}
         </div>
       )}
+    </div>
+  )
+}
 
-      {!offering && (
+// ─── Schedule Tab ─────────────────────────────────────────────────────────────
+function ScheduleTab({ schedule, setSchedule, showScheduleForm, setShowScheduleForm, showToast, onOpenSettings }) {
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    setNow(new Date())
+    const t = setInterval(() => setNow(new Date()), 30000)
+    return () => clearInterval(t)
+  }, [])
+
+  const { current, next, day } = getScheduleStatus(schedule, now)
+  const isWeekend = day === 0 || day === 6
+
+  return (
+    <div>
+      {schedule.length > 0 && (
         <div style={{
-          background: '#EDE9FF', borderRadius: 14, padding: '12px 14px', marginBottom: 16,
-          border: '1px solid #C4B8F5', fontSize: 12, color: '#4A3F8A', lineHeight: 1.5,
+          background: current ? '#E0F5EE' : '#fff',
+          borderRadius: 14, padding: '14px 16px', marginBottom: 16,
+          border: `1px solid ${current ? '#7DD4B5' : '#EAEAF0'}`,
         }}>
-          También puedes agregar clases manualmente con el botón +. Al crear un control, la app buscará la hora según la asignatura y el día.
+          {current ? (
+            <>
+              <p style={{ fontSize: 10, fontWeight: 800, color: '#1D9E75', letterSpacing: 1, marginBottom: 6 }}>EN CLASE AHORA</p>
+              <p style={{ fontWeight: 700, fontSize: 16, color: '#0B5C40', lineHeight: 1.3 }}>{current.subject}</p>
+              <p style={{ marginTop: 4, fontSize: 13, color: '#0B5C40' }}>
+                {shortEventType(current.eventType)} · {current.startTime}–{current.endTime}
+                {current.professor && ` · ${current.professor.split(' ').slice(0, 2).join(' ')}`}
+              </p>
+            </>
+          ) : isWeekend ? (
+            <>
+              <p style={{ fontSize: 10, fontWeight: 700, color: '#AAA', letterSpacing: 1, marginBottom: 4 }}>HOY</p>
+              <p style={{ fontWeight: 600, fontSize: 14, color: '#666' }}>Fin de semana — sin clases</p>
+            </>
+          ) : next ? (
+            <>
+              <p style={{ fontSize: 10, fontWeight: 700, color: '#888', letterSpacing: 1, marginBottom: 4 }}>SIN CLASE AHORA</p>
+              <p style={{ fontWeight: 600, fontSize: 14, color: '#1A1A2E' }}>Próxima: {next.subject}</p>
+              <p style={{ marginTop: 4, fontSize: 12, color: '#888' }}>
+                {shortEventType(next.eventType)} a las {next.startTime}
+              </p>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: 10, fontWeight: 700, color: '#888', letterSpacing: 1, marginBottom: 4 }}>HOY</p>
+              <p style={{ fontWeight: 600, fontSize: 14, color: '#666' }}>Sin más clases hoy</p>
+            </>
+          )}
         </div>
       )}
 
@@ -901,15 +993,20 @@ function ScheduleTab({
         />
       )}
 
-      {schedule.length === 0 && !showScheduleForm && !offering && (
+      {schedule.length === 0 && !showScheduleForm && (
         <div style={{ textAlign: 'center', padding: '48px 0' }}>
           <div style={{ width: 60, height: 60, borderRadius: 18, background: '#E0F5EE', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', color: '#1D9E75' }}>
             <Icon name="book" size={28} />
           </div>
-          <p style={{ fontWeight: 700, fontSize: 16, color: '#1A1A2E' }}>Sin horario configurado</p>
+          <p style={{ fontWeight: 700, fontSize: 16, color: '#1A1A2E' }}>Sin horario</p>
           <p style={{ marginTop: 6, fontSize: 13, color: '#AAA', lineHeight: 1.6 }}>
-            Carga tu oferta académica o agrega<br />clases manualmente con +.
+            Ve a <strong>Config</strong> para cargar tu oferta,<br />elegir ramos y generar el horario.
           </p>
+          {onOpenSettings && (
+            <button onClick={onOpenSettings} style={{ ...primaryBtn, marginTop: 16, flex: 'none', padding: '10px 20px' }}>
+              Ir a Configuración
+            </button>
+          )}
         </div>
       )}
 
@@ -920,6 +1017,7 @@ function ScheduleTab({
           </p>
           <WeeklyGrid
             schedule={schedule}
+            now={now}
             onRemove={id => {
               setSchedule(p => p.filter(s => s.id !== id))
               showToast('Clase eliminada del horario')
@@ -1151,7 +1249,7 @@ export default function App() {
     setSelectedGoal(null)
     if (tab === 'goals') setShowGoalForm(true)
     else if (tab === 'calendar') setShowEventForm(true)
-    else setShowScheduleForm(true)
+    else if (tab === 'schedule') setShowScheduleForm(true)
   }
 
   return (
@@ -1171,21 +1269,23 @@ export default function App() {
       <div style={{ padding: '22px 18px 0', background: '#F8F7FC' }}>
         <p style={{ fontSize: 10, fontWeight: 700, color: '#AAA', letterSpacing: 1.5, textTransform: 'uppercase' }}>Mi Centro</p>
         <h1 style={{ margin: '2px 0 16px', fontSize: 26, fontWeight: 800, color: '#1A1A2E', letterSpacing: -0.8 }}>Organización</h1>
-        <div style={{ display: 'flex', gap: 4, background: '#EDEDF5', borderRadius: 13, padding: 4 }}>
+        <div style={{ display: 'flex', gap: 3, background: '#EDEDF5', borderRadius: 13, padding: 4 }}>
           {[
-            { id: 'goals', label: 'Objetivos', icon: 'target' },
+            { id: 'goals', label: 'Metas', icon: 'target' },
             { id: 'schedule', label: 'Horario', icon: 'book' },
-            { id: 'calendar', label: 'Calendario', icon: 'calendar' },
+            { id: 'calendar', label: 'Agenda', icon: 'calendar' },
+            { id: 'settings', label: 'Config', icon: 'settings' },
           ].map(t => (
             <button key={t.id} onClick={() => onTabChange(t.id)} style={{
-              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-              padding: '9px 0', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600,
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              padding: '8px 0', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600,
               background: tab === t.id ? '#fff' : 'transparent',
               color: tab === t.id ? '#5238C4' : '#999',
               boxShadow: tab === t.id ? '0 1px 6px rgba(0,0,0,0.1)' : 'none',
               transition: 'all 0.18s',
             }}>
-              <Icon name={t.icon} size={14} /> {t.label}
+              <Icon name={t.icon} size={13} />
+              <span style={{ lineHeight: 1 }}>{t.label}</span>
             </button>
           ))}
         </div>
@@ -1197,10 +1297,14 @@ export default function App() {
             showGoalForm={showGoalForm} setShowGoalForm={setShowGoalForm} showToast={showToast} />
         ) : tab === 'schedule' ? (
           <ScheduleTab schedule={schedule} setSchedule={setSchedule}
+            showScheduleForm={showScheduleForm} setShowScheduleForm={setShowScheduleForm}
+            showToast={showToast} onOpenSettings={() => setTab('settings')} />
+        ) : tab === 'settings' ? (
+          <ConfigTab schedule={schedule} setSchedule={setSchedule}
             offering={offering} setOffering={setOffering}
             myCourses={myCourses} setMyCourses={setMyCourses}
             sectionSelections={sectionSelections} setSectionSelections={setSectionSelections}
-            showScheduleForm={showScheduleForm} setShowScheduleForm={setShowScheduleForm} showToast={showToast} />
+            showToast={showToast} onScheduleGenerated={() => setTab('schedule')} />
         ) : (
           <CalendarTab events={events} setEvents={setEvents} schedule={schedule} gToken={gToken}
             connectGoogle={connectGoogle} disconnectGoogle={disconnectGoogle} pushToGCal={pushToGCal}
@@ -1208,6 +1312,7 @@ export default function App() {
         )}
       </div>
 
+      {tab !== 'settings' && (
       <button
         onClick={openFab}
         style={{
@@ -1219,6 +1324,7 @@ export default function App() {
         }}>
         <Icon name="plus" size={22} />
       </button>
+      )}
     </div>
   )
 }
