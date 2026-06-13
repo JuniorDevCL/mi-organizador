@@ -113,6 +113,29 @@ const slotDuration = (startTime, endTime) => {
   return (eh * 60 + em) - (sh * 60 + sm)
 }
 
+const getEventDateTime = (ev) => {
+  const time = ev.time || '23:59'
+  return new Date(`${ev.date}T${time}:00`)
+}
+
+const getTimeRemaining = (ev, now = new Date()) => {
+  const ms = getEventDateTime(ev) - now
+  return ms > 0 ? ms : null
+}
+
+const formatTimeRemaining = (ms) => {
+  const days = Math.floor(ms / 86400000)
+  const hours = Math.floor((ms % 86400000) / 3600000)
+  const minutes = Math.floor((ms % 3600000) / 60000)
+
+  if (days > 0 && hours > 0) return `${days}d, ${hours}h`
+  if (days > 0) return `${days}d`
+  if (hours > 0 && minutes > 0) return `${hours}h, ${minutes}m`
+  if (hours > 0) return `${hours}h`
+  if (minutes > 0) return `${minutes}m`
+  return 'Ahora'
+}
+
 const findScheduleSlot = (schedule, dateStr, subject) => {
   if (!dateStr || !subject.trim() || !schedule.length) return null
   const day = new Date(dateStr + 'T12:00:00').getDay()
@@ -528,9 +551,12 @@ function EventForm({ onSave, onClose, schedule, courseOptions }) {
 }
 
 // ─── Event Card ───────────────────────────────────────────────────────────────
-function EventCard({ ev, onSync, onDelete, gToken, past }) {
+function EventCard({ ev, onSync, onDelete, gToken, past, now = new Date() }) {
   const cfg = TYPE_CFG[ev.type] || TYPE_CFG.otro
-  const daysUntil = past ? null : Math.ceil((new Date(ev.date) - new Date()) / 86400000)
+  const remainingMs = past ? null : getTimeRemaining(ev, now)
+  const remainingLabel = remainingMs !== null ? formatTimeRemaining(remainingMs) : null
+  const urgent = remainingMs !== null && remainingMs <= 2 * 86400000
+  const soon = remainingMs !== null && remainingMs <= 7 * 86400000
 
   return (
     <div style={{ background: past ? 'var(--bg-muted)' : 'var(--bg-card)', borderRadius: 14, padding: '12px 14px', border: `1px solid ${past ? 'var(--border)' : cfg.border}`, opacity: past ? 0.75 : 1 }}>
@@ -555,13 +581,13 @@ function EventCard({ ev, onSync, onDelete, gToken, past }) {
                 Personal
               </span>
             )}
-            {daysUntil !== null && daysUntil <= 7 && daysUntil >= 0 && (
+            {remainingLabel && (
               <span style={{
                 fontSize: 11, padding: '2px 8px', borderRadius: 99, fontWeight: 700,
-                background: daysUntil <= 2 ? 'var(--err-bg)' : 'var(--warn-bg)',
-                color: daysUntil <= 2 ? 'var(--err-text)' : 'var(--warn-text)',
+                background: urgent ? 'var(--err-bg)' : soon ? 'var(--warn-bg)' : 'var(--info-bg)',
+                color: urgent ? 'var(--err-text)' : soon ? 'var(--warn-text)' : 'var(--info-text)',
               }}>
-                {daysUntil === 0 ? 'Hoy' : daysUntil === 1 ? 'Mañana' : `${daysUntil}d`}
+                {remainingLabel}
               </span>
             )}
           </div>
@@ -1148,7 +1174,13 @@ function ScheduleTab({ schedule, setSchedule, showScheduleForm, setShowScheduleF
 
 // ─── Calendar Tab ─────────────────────────────────────────────────────────────
 function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, connectGoogle, disconnectGoogle, pushToGCal, saveEvent, showToast, showEventForm, setShowEventForm }) {
-  const now = new Date()
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    setNow(new Date())
+    const t = setInterval(() => setNow(new Date()), 60000)
+    return () => clearInterval(t)
+  }, [])
+
   const upcoming = [...events].filter(e => new Date(e.date + 'T23:59') >= now).sort((a, b) => new Date(a.date) - new Date(b.date))
   const past = [...events].filter(e => new Date(e.date + 'T23:59') < now).sort((a, b) => new Date(b.date) - new Date(a.date))
 
@@ -1207,7 +1239,7 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
           <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 1 }}>Próximos ({upcoming.length})</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
             {upcoming.map(ev => (
-              <EventCard key={ev.id} ev={ev} gToken={gToken}
+              <EventCard key={ev.id} ev={ev} now={now} gToken={gToken}
                 onSync={() => pushToGCal(ev)}
                 onDelete={() => { setEvents(p => p.filter(e => e.id !== ev.id)); showToast('Evento eliminado') }} />
             ))}
