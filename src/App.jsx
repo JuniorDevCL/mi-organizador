@@ -3,6 +3,7 @@ import {
   parseAcademicOffering,
   syncOfferingSchedule,
   shortEventType,
+  normalizeEventType,
 } from './offeringParser'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -41,7 +42,7 @@ const DAY_SHORT = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 const WEEK_DAYS = [1, 2, 3, 4, 5]
 
 const blockColor = (eventType = '') => {
-  const t = eventType.toUpperCase()
+  const t = normalizeEventType(eventType)
   if (t.includes('CATEDRA')) return { bg: '#E8F4FD', text: '#0D4A82', border: '#8CC4EE' }
   if (t.includes('AYUDANTIA')) return { bg: '#FAEEDA', text: '#854F0B', border: '#FAC775' }
   if (t.includes('LABORATORIO')) return { bg: '#E0F5EE', text: '#0B5C40', border: '#7DD4B5' }
@@ -114,10 +115,10 @@ const findScheduleSlot = (schedule, dateStr, subject) => {
   })
   if (!matches.length) return null
   const priority = (b) => {
-    const t = (b.eventType || '').toLowerCase()
-    if (t.includes('catedra')) return 0
-    if (t.includes('ayudantia')) return 1
-    if (t.includes('laboratorio')) return 2
+    const t = normalizeEventType(b.eventType || '')
+    if (t.includes('CATEDRA')) return 0
+    if (t.includes('AYUDANTIA')) return 1
+    if (t.includes('LABORATORIO')) return 2
     return 3
   }
   matches.sort((a, b) => priority(a) - priority(b))
@@ -611,7 +612,7 @@ function WeeklyGrid({ schedule, onRemove, now }) {
     const active = isBlockNow(block, now)
     return (
       <div style={{
-        background: active ? '#fff' : c.bg,
+        background: c.bg,
         border: active ? '2px solid #5238C4' : `1px solid ${c.border}`,
         borderRadius: 8, padding: compact ? '5px 4px' : '8px 8px', position: 'relative',
         boxShadow: active ? '0 0 0 3px rgba(82,56,196,0.2)' : 'none',
@@ -632,16 +633,16 @@ function WeeklyGrid({ schedule, onRemove, now }) {
           </button>
         )}
         <p style={{
-          fontSize: compact ? 9 : 11, fontWeight: 700, color: active ? '#5238C4' : c.text, lineHeight: 1.25,
+          fontSize: compact ? 9 : 11, fontWeight: 700, color: active ? c.text : c.text, lineHeight: 1.25,
           paddingRight: compact ? 0 : 14, wordBreak: 'break-word',
         }}>
           {block.subject}
         </p>
-        <p style={{ fontSize: compact ? 8 : 10, color: active ? '#5238C4' : c.text, opacity: 0.9, marginTop: 3 }}>
+        <p style={{ fontSize: compact ? 8 : 10, color: c.text, opacity: 0.9, marginTop: 3 }}>
           {block.startTime}–{block.endTime}
         </p>
         {block.eventType && (
-          <p style={{ fontSize: compact ? 7 : 9, color: active ? '#5238C4' : c.text, opacity: 0.75, marginTop: 2 }}>
+          <p style={{ fontSize: compact ? 7 : 9, color: c.text, opacity: 0.75, marginTop: 2 }}>
             {shortEventType(block.eventType)}
           </p>
         )}

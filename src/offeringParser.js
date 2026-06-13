@@ -167,8 +167,11 @@ export const syncOfferingSchedule = (offering, myCourses, sectionSelections, cur
   return applyOfferingToSchedule(offering, selections, currentSchedule)
 }
 
+export const normalizeEventType = (s = '') =>
+  s.toUpperCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+
 export const shortEventType = (t = '') => {
-  const u = t.toUpperCase()
+  const u = normalizeEventType(t)
   if (u.includes('CATEDRA')) return 'Cátedra'
   if (u.includes('AYUDANTIA')) return 'Ayudantía'
   if (u.includes('LABORATORIO')) return 'Laboratorio'
