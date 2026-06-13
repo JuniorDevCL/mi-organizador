@@ -1,4 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
+import {
+  parseAcademicOffering,
+  applyOfferingToSchedule,
+  shortEventType,
+} from './offeringParser'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Google Calendar — define VITE_GOOGLE_CLIENT_ID en .env.local o en Netlify
@@ -52,7 +57,22 @@ const slotDuration = (startTime, endTime) => {
 const findScheduleSlot = (schedule, dateStr, subject) => {
   if (!dateStr || !subject.trim() || !schedule.length) return null
   const day = new Date(dateStr + 'T12:00:00').getDay()
-  return schedule.find(s => s.day === day && matchSubject(subject, s.subject)) || null
+  const matches = schedule.filter(s => {
+    if (s.day !== day) return false
+    return matchSubject(subject, s.subject)
+      || matchSubject(subject, s.courseName)
+      || matchSubject(subject, s.courseCode)
+  })
+  if (!matches.length) return null
+  const priority = (b) => {
+    const t = (b.eventType || '').toLowerCase()
+    if (t.includes('catedra')) return 0
+    if (t.includes('ayudantia')) return 1
+    if (t.includes('laboratorio')) return 2
+    return 3
+  }
+  matches.sort((a, b) => priority(a) - priority(b))
+  return matches[0]
 }
 
 // ─── Icon ─────────────────────────────────────────────────────────────────────
@@ -72,6 +92,7 @@ const Icon = ({ name, size = 20 }) => {
     back:     <><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12,19 5,12 12,5"/></>,
     logout:   <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></>,
     book:     <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>,
+    upload:   <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -517,20 +538,132 @@ function ScheduleForm({ onSave, onClose }) {
 }
 
 // ─── Schedule Tab ─────────────────────────────────────────────────────────────
-function ScheduleTab({ schedule, setSchedule, showScheduleForm, setShowScheduleForm, showToast }) {
+function ScheduleTab({
+  schedule, setSchedule, offering, setOffering,
+  sectionSelections, setSectionSelections,
+  showScheduleForm, setShowScheduleForm, showToast,
+}) {
+  const fileRef = useRef(null)
   const byDay = [1, 2, 3, 4, 5, 6].map(day => ({
     day,
     blocks: schedule.filter(s => s.day === day).sort((a, b) => a.startTime.localeCompare(b.startTime)),
   })).filter(d => d.blocks.length > 0)
 
+  const handleFile = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const parsed = parseAcademicOffering(reader.result, file.name)
+        setOffering(parsed)
+        setSectionSelections({})
+        showToast(`${parsed.courseList.length} ramos cargados ✓`)
+      } catch (err) {
+        showToast(err.message || 'Error al leer el archivo', 'err')
+      }
+    }
+    reader.readAsText(file, 'UTF-8')
+    e.target.value = ''
+  }
+
+  const handleSectionChange = (code, section) => {
+    setSectionSelections(prev => ({ ...prev, [code]: section }))
+  }
+
+  const applySections = () => {
+    const selected = Object.values(sectionSelections).filter(Boolean).length
+    if (!selected) { showToast('Selecciona al menos una sección', 'warn'); return }
+    const next = applyOfferingToSchedule(offering, sectionSelections, schedule)
+    setSchedule(next)
+    showToast(`Horario generado (${next.filter(b => b.fromOffering).length} bloques) ✓`)
+  }
+
+  const clearOffering = () => {
+    setOffering(null)
+    setSectionSelections({})
+    setSchedule(prev => prev.filter(b => !b.fromOffering))
+    showToast('Oferta académica eliminada')
+  }
+
   return (
     <div>
       <div style={{
-        background: '#EDE9FF', borderRadius: 14, padding: '12px 14px', marginBottom: 16,
-        border: '1px solid #C4B8F5', fontSize: 12, color: '#4A3F8A', lineHeight: 1.5,
+        background: '#fff', borderRadius: 14, padding: 14, marginBottom: 16,
+        border: '1px solid #EAEAF0',
       }}>
-        Configura tus clases semanales. Al crear un control o solemne, la app buscará la hora según la asignatura y el día.
+        <p style={{ fontWeight: 700, fontSize: 14, color: '#1A1A2E', marginBottom: 8 }}>Oferta académica</p>
+        <p style={{ fontSize: 12, color: '#888', lineHeight: 1.5, marginBottom: 12 }}>
+          Exporta tu oferta desde Excel como CSV (; o tab) y súbela aquí. Luego elige tu sección en cada ramo.
+        </p>
+        <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" onChange={handleFile} style={{ display: 'none' }} />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => fileRef.current?.click()} style={{
+            ...primaryBtn, flex: 'none', display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px',
+          }}>
+            <Icon name="upload" size={15} /> Cargar CSV
+          </button>
+          {offering && (
+            <button onClick={clearOffering} style={{ ...secondaryBtn, padding: '9px 14px', color: '#D85A30', borderColor: '#F5B98A' }}>
+              Eliminar oferta
+            </button>
+          )}
+        </div>
+        {offering && (
+          <p style={{ marginTop: 10, fontSize: 12, color: '#0B5C40', background: '#E0F5EE', padding: '8px 10px', borderRadius: 8 }}>
+            <strong>{offering.fileName}</strong> · {offering.courseList.length} ramos · {Object.keys(sectionSelections).filter(k => sectionSelections[k]).length} secciones elegidas
+          </p>
+        )}
       </div>
+
+      {offering && (
+        <div style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 16, border: '1px solid #EAEAF0' }}>
+          <p style={{ fontWeight: 700, fontSize: 14, color: '#1A1A2E', marginBottom: 4 }}>Mis secciones</p>
+          <p style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Elige la sección en la que estás inscrito en cada ramo.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {offering.courseList.map(course => {
+              const sections = Object.keys(course.sections).sort((a, b) => {
+                const na = parseInt(a.replace(/\D/g, '')) || 0
+                const nb = parseInt(b.replace(/\D/g, '')) || 0
+                return na - nb
+              })
+              return (
+                <div key={course.code} style={{
+                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                  padding: '10px 12px', background: '#FAFAFA', borderRadius: 10, border: '1px solid #F0F0F8',
+                }}>
+                  <div style={{ flex: 1, minWidth: 120 }}>
+                    <p style={{ fontWeight: 600, fontSize: 13, color: '#1A1A2E' }}>{course.name}</p>
+                    <p style={{ fontSize: 11, color: '#AAA' }}>{course.code}{course.credits ? ` · ${course.credits} créditos` : ''}</p>
+                  </div>
+                  <select
+                    value={sectionSelections[course.code] || ''}
+                    onChange={e => handleSectionChange(course.code, e.target.value)}
+                    style={{ ...inputSt, width: 'auto', minWidth: 130, flex: 'none' }}
+                  >
+                    <option value="">— Sección —</option>
+                    {sections.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              )
+            })}
+          </div>
+          <button onClick={applySections} style={{ ...primaryBtn, marginTop: 14, width: '100%' }}>
+            Generar mi horario
+          </button>
+        </div>
+      )}
+
+      {!offering && (
+        <div style={{
+          background: '#EDE9FF', borderRadius: 14, padding: '12px 14px', marginBottom: 16,
+          border: '1px solid #C4B8F5', fontSize: 12, color: '#4A3F8A', lineHeight: 1.5,
+        }}>
+          También puedes agregar clases manualmente con el botón +. Al crear un control, la app buscará la hora según la asignatura y el día.
+        </div>
+      )}
 
       {showScheduleForm && (
         <ScheduleForm
@@ -543,16 +676,22 @@ function ScheduleTab({ schedule, setSchedule, showScheduleForm, setShowScheduleF
         />
       )}
 
-      {schedule.length === 0 && !showScheduleForm && (
+      {schedule.length === 0 && !showScheduleForm && !offering && (
         <div style={{ textAlign: 'center', padding: '48px 0' }}>
           <div style={{ width: 60, height: 60, borderRadius: 18, background: '#E0F5EE', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', color: '#1D9E75' }}>
             <Icon name="book" size={28} />
           </div>
           <p style={{ fontWeight: 700, fontSize: 16, color: '#1A1A2E' }}>Sin horario configurado</p>
           <p style={{ marginTop: 6, fontSize: 13, color: '#AAA', lineHeight: 1.6 }}>
-            Agrega tus ramos y horarios<br />para auto-asignar controles y solemnes.
+            Carga tu oferta académica o agrega<br />clases manualmente con +.
           </p>
         </div>
+      )}
+
+      {schedule.length > 0 && (
+        <p style={{ margin: '0 0 12px', fontSize: 11, fontWeight: 700, color: '#AAA', textTransform: 'uppercase', letterSpacing: 1 }}>
+          Mi horario semanal
+        </p>
       )}
 
       {byDay.map(({ day, blocks }) => (
@@ -573,11 +712,20 @@ function ScheduleTab({ schedule, setSchedule, showScheduleForm, setShowScheduleF
                   <Icon name="book" size={18} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontWeight: 600, fontSize: 14, color: '#1A1A2E' }}>{block.subject}</p>
+                  <p style={{ fontWeight: 600, fontSize: 14, color: '#1A1A2E' }}>
+                    {block.subject}
+                    {block.eventType && (
+                      <span style={{ fontWeight: 500, color: '#888' }}> · {shortEventType(block.eventType)}</span>
+                    )}
+                  </p>
                   <p style={{ marginTop: 2, fontSize: 12, color: '#888' }}>
                     {block.startTime} – {block.endTime}
-                    {block.location && ` · ${block.location}`}
+                    {block.professor && ` · ${block.professor}`}
+                    {!block.professor && block.location && ` · ${block.location}`}
                   </p>
+                  {block.section && (
+                    <p style={{ marginTop: 2, fontSize: 11, color: '#BBB' }}>{block.section}{block.courseCode ? ` · ${block.courseCode}` : ''}</p>
+                  )}
                 </div>
                 <button onClick={() => {
                   setSchedule(p => p.filter(s => s.id !== block.id))
@@ -683,6 +831,8 @@ export default function App() {
   const [goals, setGoals] = useState(() => LS.get('app_goals_v3', []))
   const [events, setEvents] = useState(() => LS.get('app_events_v3', []))
   const [schedule, setSchedule] = useState(() => LS.get('app_schedule_v1', []))
+  const [offering, setOffering] = useState(() => LS.get('app_offering_v1', null))
+  const [sectionSelections, setSectionSelections] = useState(() => LS.get('app_section_sel_v1', {}))
   const [selectedGoal, setSelectedGoal] = useState(null)
   const [showGoalForm, setShowGoalForm] = useState(false)
   const [showEventForm, setShowEventForm] = useState(false)
@@ -695,6 +845,8 @@ export default function App() {
   useEffect(() => { LS.set('app_goals_v3', goals) }, [goals])
   useEffect(() => { LS.set('app_events_v3', events) }, [events])
   useEffect(() => { LS.set('app_schedule_v1', schedule) }, [schedule])
+  useEffect(() => { LS.set('app_offering_v1', offering) }, [offering])
+  useEffect(() => { LS.set('app_section_sel_v1', sectionSelections) }, [sectionSelections])
 
   const showToast = (msg, type = 'ok') => {
     setToast({ msg, type })
@@ -854,6 +1006,8 @@ export default function App() {
             showGoalForm={showGoalForm} setShowGoalForm={setShowGoalForm} showToast={showToast} />
         ) : tab === 'schedule' ? (
           <ScheduleTab schedule={schedule} setSchedule={setSchedule}
+            offering={offering} setOffering={setOffering}
+            sectionSelections={sectionSelections} setSectionSelections={setSectionSelections}
             showScheduleForm={showScheduleForm} setShowScheduleForm={setShowScheduleForm} showToast={showToast} />
         ) : (
           <CalendarTab events={events} setEvents={setEvents} schedule={schedule} gToken={gToken}
