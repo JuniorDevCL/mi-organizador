@@ -540,10 +540,25 @@ function ScheduleForm({ onSave, onClose }) {
 // ─── Schedule Tab ─────────────────────────────────────────────────────────────
 function ScheduleTab({
   schedule, setSchedule, offering, setOffering,
+  myCourses, setMyCourses,
   sectionSelections, setSectionSelections,
   showScheduleForm, setShowScheduleForm, showToast,
 }) {
   const fileRef = useRef(null)
+  const searchRef = useRef(null)
+  const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+
+  const norm = (s) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+
+  const searchResults = offering && search.trim()
+    ? offering.courseList.filter(c => {
+        if (myCourses.includes(c.code)) return false
+        const q = norm(search.trim())
+        return norm(c.name).includes(q) || norm(c.code).includes(q)
+      }).slice(0, 8)
+    : []
+
   const byDay = [1, 2, 3, 4, 5, 6].map(day => ({
     day,
     blocks: schedule.filter(s => s.day === day).sort((a, b) => a.startTime.localeCompare(b.startTime)),
@@ -557,6 +572,7 @@ function ScheduleTab({
       try {
         const parsed = parseAcademicOffering(reader.result, file.name)
         setOffering(parsed)
+        setMyCourses([])
         setSectionSelections({})
         showToast(`${parsed.courseList.length} ramos cargados ✓`)
       } catch (err) {
@@ -567,20 +583,44 @@ function ScheduleTab({
     e.target.value = ''
   }
 
+  const addCourse = (code) => {
+    if (myCourses.includes(code)) { showToast('Ese ramo ya está en tu lista', 'warn'); return }
+    setMyCourses(prev => [...prev, code])
+    setSearch('')
+    setSearchOpen(false)
+  }
+
+  const removeCourse = (code) => {
+    setMyCourses(prev => prev.filter(c => c !== code))
+    setSectionSelections(prev => {
+      const next = { ...prev }
+      delete next[code]
+      return next
+    })
+  }
+
   const handleSectionChange = (code, section) => {
     setSectionSelections(prev => ({ ...prev, [code]: section }))
   }
 
   const applySections = () => {
-    const selected = Object.values(sectionSelections).filter(Boolean).length
-    if (!selected) { showToast('Selecciona al menos una sección', 'warn'); return }
-    const next = applyOfferingToSchedule(offering, sectionSelections, schedule)
+    if (!myCourses.length) { showToast('Agrega al menos un ramo', 'warn'); return }
+    const selections = Object.fromEntries(
+      myCourses.filter(code => sectionSelections[code]).map(code => [code, sectionSelections[code]])
+    )
+    if (!Object.keys(selections).length) { showToast('Elige la sección de cada ramo', 'warn'); return }
+    const pending = myCourses.filter(code => !sectionSelections[code])
+    if (pending.length) {
+      showToast(`${pending.length} ramo(s) sin sección — se omitirán`, 'warn')
+    }
+    const next = applyOfferingToSchedule(offering, selections, schedule)
     setSchedule(next)
     showToast(`Horario generado (${next.filter(b => b.fromOffering).length} bloques) ✓`)
   }
 
   const clearOffering = () => {
     setOffering(null)
+    setMyCourses([])
     setSectionSelections({})
     setSchedule(prev => prev.filter(b => !b.fromOffering))
     showToast('Oferta académica eliminada')
@@ -594,7 +634,7 @@ function ScheduleTab({
       }}>
         <p style={{ fontWeight: 700, fontSize: 14, color: '#1A1A2E', marginBottom: 8 }}>Oferta académica</p>
         <p style={{ fontSize: 12, color: '#888', lineHeight: 1.5, marginBottom: 12 }}>
-          Exporta tu oferta desde Excel como CSV (; o tab) y súbela aquí. Luego elige tu sección en cada ramo.
+          Exporta tu oferta desde Excel como CSV y súbela aquí. Luego busca y agrega solo los ramos que cursas.
         </p>
         <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" onChange={handleFile} style={{ display: 'none' }} />
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -611,17 +651,79 @@ function ScheduleTab({
         </div>
         {offering && (
           <p style={{ marginTop: 10, fontSize: 12, color: '#0B5C40', background: '#E0F5EE', padding: '8px 10px', borderRadius: 8 }}>
-            <strong>{offering.fileName}</strong> · {offering.courseList.length} ramos · {Object.keys(sectionSelections).filter(k => sectionSelections[k]).length} secciones elegidas
+            <strong>{offering.fileName}</strong> · {offering.courseList.length} en oferta · {myCourses.length} en tu semestre
+            {myCourses.length > 0 && ` · ${myCourses.filter(c => sectionSelections[c]).length} con sección`}
           </p>
         )}
       </div>
 
       {offering && (
         <div style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 16, border: '1px solid #EAEAF0' }}>
-          <p style={{ fontWeight: 700, fontSize: 14, color: '#1A1A2E', marginBottom: 4 }}>Mis secciones</p>
-          <p style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Elige la sección en la que estás inscrito en cada ramo.</p>
+          <p style={{ fontWeight: 700, fontSize: 14, color: '#1A1A2E', marginBottom: 4 }}>Mis ramos</p>
+          <p style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Busca un ramo, agrégalo y elige tu sección.</p>
+
+          <div style={{ position: 'relative', marginBottom: 14 }}>
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={e => { setSearch(e.target.value); setSearchOpen(true) }}
+              onFocus={() => setSearchOpen(true)}
+              onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+              placeholder="Buscar por nombre o código (ej: Cálculo, CBF1000)..."
+              style={inputSt}
+            />
+            {searchOpen && search.trim() && searchResults.length > 0 && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: 4,
+                background: '#fff', borderRadius: 12, border: '1px solid #E8E8F0',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.1)', overflow: 'hidden',
+              }}>
+                {searchResults.map(course => (
+                  <button
+                    key={course.code}
+                    type="button"
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => addCourse(course.code)}
+                    style={{
+                      width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none',
+                      background: '#fff', cursor: 'pointer', borderBottom: '1px solid #F5F5F8',
+                    }}
+                  >
+                    <p style={{ fontWeight: 600, fontSize: 13, color: '#1A1A2E' }}>{course.name}</p>
+                    <p style={{ fontSize: 11, color: '#AAA', marginTop: 2 }}>
+                      {course.code}{course.credits ? ` · ${course.credits} créditos` : ''}
+                      · {Object.keys(course.sections).length} secciones
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+            {searchOpen && search.trim() && searchResults.length === 0 && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: 4,
+                background: '#fff', borderRadius: 12, border: '1px solid #E8E8F0', padding: '12px',
+                fontSize: 12, color: '#AAA', boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+              }}>
+                No se encontraron ramos
+              </div>
+            )}
+          </div>
+
+          {myCourses.length === 0 && (
+            <div style={{
+              textAlign: 'center', padding: '24px 12px', background: '#FAFAFA',
+              borderRadius: 12, border: '1px dashed #E0E0EA', marginBottom: 14,
+            }}>
+              <p style={{ fontSize: 13, color: '#AAA', lineHeight: 1.5 }}>
+                Usa el buscador para agregar<br />los ramos de tu semestre.
+              </p>
+            </div>
+          )}
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {offering.courseList.map(course => {
+            {myCourses.map(code => {
+              const course = offering.courses[code]
+              if (!course) return null
               const sections = Object.keys(course.sections).sort((a, b) => {
                 const na = parseInt(a.replace(/\D/g, '')) || 0
                 const nb = parseInt(b.replace(/\D/g, '')) || 0
@@ -629,30 +731,41 @@ function ScheduleTab({
               })
               return (
                 <div key={course.code} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                  display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
                   padding: '10px 12px', background: '#FAFAFA', borderRadius: 10, border: '1px solid #F0F0F8',
                 }}>
-                  <div style={{ flex: 1, minWidth: 120 }}>
+                  <div style={{ flex: 1, minWidth: 100 }}>
                     <p style={{ fontWeight: 600, fontSize: 13, color: '#1A1A2E' }}>{course.name}</p>
                     <p style={{ fontSize: 11, color: '#AAA' }}>{course.code}{course.credits ? ` · ${course.credits} créditos` : ''}</p>
                   </div>
                   <select
                     value={sectionSelections[course.code] || ''}
                     onChange={e => handleSectionChange(course.code, e.target.value)}
-                    style={{ ...inputSt, width: 'auto', minWidth: 130, flex: 'none' }}
+                    style={{ ...inputSt, width: 'auto', minWidth: 120, flex: 'none', fontSize: 13 }}
                   >
                     <option value="">— Sección —</option>
                     {sections.map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    onClick={() => removeCourse(course.code)}
+                    style={{ background: '#FFF0F0', color: '#D85A30', border: 'none', borderRadius: 8, padding: '8px 10px', cursor: 'pointer', flexShrink: 0 }}
+                    title="Quitar ramo"
+                  >
+                    <Icon name="trash" size={14} />
+                  </button>
                 </div>
               )
             })}
           </div>
-          <button onClick={applySections} style={{ ...primaryBtn, marginTop: 14, width: '100%' }}>
-            Generar mi horario
-          </button>
+
+          {myCourses.length > 0 && (
+            <button onClick={applySections} style={{ ...primaryBtn, marginTop: 14, width: '100%' }}>
+              Generar mi horario
+            </button>
+          )}
         </div>
       )}
 
@@ -832,6 +945,7 @@ export default function App() {
   const [events, setEvents] = useState(() => LS.get('app_events_v3', []))
   const [schedule, setSchedule] = useState(() => LS.get('app_schedule_v1', []))
   const [offering, setOffering] = useState(() => LS.get('app_offering_v1', null))
+  const [myCourses, setMyCourses] = useState(() => LS.get('app_my_courses_v1', []))
   const [sectionSelections, setSectionSelections] = useState(() => LS.get('app_section_sel_v1', {}))
   const [selectedGoal, setSelectedGoal] = useState(null)
   const [showGoalForm, setShowGoalForm] = useState(false)
@@ -846,6 +960,7 @@ export default function App() {
   useEffect(() => { LS.set('app_events_v3', events) }, [events])
   useEffect(() => { LS.set('app_schedule_v1', schedule) }, [schedule])
   useEffect(() => { LS.set('app_offering_v1', offering) }, [offering])
+  useEffect(() => { LS.set('app_my_courses_v1', myCourses) }, [myCourses])
   useEffect(() => { LS.set('app_section_sel_v1', sectionSelections) }, [sectionSelections])
 
   const showToast = (msg, type = 'ok') => {
@@ -1007,6 +1122,7 @@ export default function App() {
         ) : tab === 'schedule' ? (
           <ScheduleTab schedule={schedule} setSchedule={setSchedule}
             offering={offering} setOffering={setOffering}
+            myCourses={myCourses} setMyCourses={setMyCourses}
             sectionSelections={sectionSelections} setSectionSelections={setSectionSelections}
             showScheduleForm={showScheduleForm} setShowScheduleForm={setShowScheduleForm} showToast={showToast} />
         ) : (
