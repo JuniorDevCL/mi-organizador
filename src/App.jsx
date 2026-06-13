@@ -37,6 +37,16 @@ const TYPE_CFG = {
 }
 
 const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
+const DAY_SHORT = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+const WEEK_DAYS = [1, 2, 3, 4, 5]
+
+const blockColor = (eventType = '') => {
+  const t = eventType.toUpperCase()
+  if (t.includes('CATEDRA')) return { bg: '#E8F4FD', text: '#0D4A82', border: '#8CC4EE' }
+  if (t.includes('AYUDANTIA')) return { bg: '#FAEEDA', text: '#854F0B', border: '#FAC775' }
+  if (t.includes('LABORATORIO')) return { bg: '#E0F5EE', text: '#0B5C40', border: '#7DD4B5' }
+  return { bg: '#EDE9FF', text: '#4A3F8A', border: '#C4B8F5' }
+}
 
 const normalizeSubject = (s) =>
   s.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
@@ -491,6 +501,113 @@ function EventCard({ ev, onSync, onDelete, gToken, past }) {
   )
 }
 
+// ─── Weekly Grid ──────────────────────────────────────────────────────────────
+function WeeklyGrid({ schedule, onRemove }) {
+  const weekBlocks = WEEK_DAYS.map(day => ({
+    day,
+    blocks: schedule.filter(s => s.day === day).sort((a, b) => a.startTime.localeCompare(b.startTime)),
+  }))
+  const extraDays = [6, 0].map(day => ({
+    day,
+    blocks: schedule.filter(s => s.day === day).sort((a, b) => a.startTime.localeCompare(b.startTime)),
+  })).filter(d => d.blocks.length > 0)
+
+  const BlockCard = ({ block, compact }) => {
+    const c = blockColor(block.eventType)
+    return (
+      <div style={{
+        background: c.bg, border: `1px solid ${c.border}`, borderRadius: 8,
+        padding: compact ? '5px 4px' : '8px 8px', position: 'relative',
+      }}>
+        {!compact && onRemove && (
+          <button type="button" onClick={() => onRemove(block.id)}
+            style={{
+              position: 'absolute', top: 4, right: 4, background: 'rgba(255,255,255,0.7)',
+              border: 'none', borderRadius: 4, padding: 2, cursor: 'pointer', color: '#D85A30', lineHeight: 0,
+            }}>
+            <Icon name="trash" size={10} />
+          </button>
+        )}
+        <p style={{
+          fontSize: compact ? 9 : 11, fontWeight: 700, color: c.text, lineHeight: 1.25,
+          paddingRight: compact ? 0 : 14, wordBreak: 'break-word',
+        }}>
+          {block.subject}
+        </p>
+        <p style={{ fontSize: compact ? 8 : 10, color: c.text, opacity: 0.9, marginTop: 3 }}>
+          {block.startTime}–{block.endTime}
+        </p>
+        {block.eventType && (
+          <p style={{ fontSize: compact ? 7 : 9, color: c.text, opacity: 0.75, marginTop: 2 }}>
+            {shortEventType(block.eventType)}
+          </p>
+        )}
+        {!compact && block.professor && (
+          <p style={{ fontSize: 9, color: c.text, opacity: 0.65, marginTop: 3, lineHeight: 1.3 }}>
+            {block.professor.split(' ').slice(0, 2).join(' ')}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 5,
+      }}>
+        {weekBlocks.map(({ day, blocks }) => (
+          <div key={day} style={{ minWidth: 0 }}>
+            <div style={{
+              textAlign: 'center', padding: '7px 2px',
+              background: 'linear-gradient(135deg, #8B83E8, #5238C4)',
+              color: '#fff', borderRadius: '10px 10px 0 0',
+              fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
+            }}>
+              {DAY_SHORT[day]}
+            </div>
+            <div style={{
+              background: '#FAFAFC', border: '1px solid #E8E8F0', borderTop: 'none',
+              borderRadius: '0 0 10px 10px', minHeight: 72, padding: 4,
+              display: 'flex', flexDirection: 'column', gap: 4,
+            }}>
+              {blocks.length === 0 ? (
+                <p style={{ fontSize: 10, color: '#D0D0D8', textAlign: 'center', padding: '20px 0', margin: 'auto' }}>—</p>
+              ) : blocks.map(block => (
+                <BlockCard key={block.id} block={block} compact />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+        {[
+          { label: 'Cátedra', ...blockColor('CATEDRA') },
+          { label: 'Ayudantía', ...blockColor('AYUDANTIA') },
+          { label: 'Laboratorio', ...blockColor('LABORATORIO') },
+        ].map(item => (
+          <span key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: '#888' }}>
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: item.bg, border: `1px solid ${item.border}` }} />
+            {item.label}
+          </span>
+        ))}
+      </div>
+
+      {extraDays.map(({ day, blocks }) => (
+        <div key={day} style={{ marginTop: 16 }}>
+          <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#AAA', textTransform: 'uppercase', letterSpacing: 1 }}>
+            {DAY_NAMES[day]}
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {blocks.map(block => <BlockCard key={block.id} block={block} />)}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Schedule Form ────────────────────────────────────────────────────────────
 function ScheduleForm({ onSave, onClose }) {
   const [subject, setSubject] = useState('')
@@ -558,11 +675,6 @@ function ScheduleTab({
         return norm(c.name).includes(q) || norm(c.code).includes(q)
       }).slice(0, 8)
     : []
-
-  const byDay = [1, 2, 3, 4, 5, 6].map(day => ({
-    day,
-    blocks: schedule.filter(s => s.day === day).sort((a, b) => a.startTime.localeCompare(b.startTime)),
-  })).filter(d => d.blocks.length > 0)
 
   const handleFile = (e) => {
     const file = e.target.files?.[0]
@@ -802,55 +914,19 @@ function ScheduleTab({
       )}
 
       {schedule.length > 0 && (
-        <p style={{ margin: '0 0 12px', fontSize: 11, fontWeight: 700, color: '#AAA', textTransform: 'uppercase', letterSpacing: 1 }}>
-          Mi horario semanal
-        </p>
-      )}
-
-      {byDay.map(({ day, blocks }) => (
-        <div key={day} style={{ marginBottom: 20 }}>
-          <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#AAA', textTransform: 'uppercase', letterSpacing: 1 }}>
-            {DAY_NAMES[day]}
+        <>
+          <p style={{ margin: '0 0 12px', fontSize: 11, fontWeight: 700, color: '#AAA', textTransform: 'uppercase', letterSpacing: 1 }}>
+            Mi horario semanal
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {blocks.map(block => (
-              <div key={block.id} style={{
-                background: '#fff', borderRadius: 14, padding: '12px 14px',
-                border: '1px solid #EAEAF0', display: 'flex', alignItems: 'center', gap: 10,
-              }}>
-                <div style={{
-                  width: 38, height: 38, borderRadius: 11, background: '#E0F5EE',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0B5C40', flexShrink: 0,
-                }}>
-                  <Icon name="book" size={18} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontWeight: 600, fontSize: 14, color: '#1A1A2E' }}>
-                    {block.subject}
-                    {block.eventType && (
-                      <span style={{ fontWeight: 500, color: '#888' }}> · {shortEventType(block.eventType)}</span>
-                    )}
-                  </p>
-                  <p style={{ marginTop: 2, fontSize: 12, color: '#888' }}>
-                    {block.startTime} – {block.endTime}
-                    {block.professor && ` · ${block.professor}`}
-                    {!block.professor && block.location && ` · ${block.location}`}
-                  </p>
-                  {block.section && (
-                    <p style={{ marginTop: 2, fontSize: 11, color: '#BBB' }}>{block.section}{block.courseCode ? ` · ${block.courseCode}` : ''}</p>
-                  )}
-                </div>
-                <button onClick={() => {
-                  setSchedule(p => p.filter(s => s.id !== block.id))
-                  showToast('Clase eliminada del horario')
-                }} style={{ background: '#FFF0F0', color: '#D85A30', border: 'none', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}>
-                  <Icon name="trash" size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
+          <WeeklyGrid
+            schedule={schedule}
+            onRemove={id => {
+              setSchedule(p => p.filter(s => s.id !== id))
+              showToast('Clase eliminada del horario')
+            }}
+          />
+        </>
+      )}
     </div>
   )
 }
