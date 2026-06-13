@@ -4,12 +4,136 @@
   padding: 0;
 }
 
+:root {
+  color-scheme: light;
+  --bg-page: #F8F7FC;
+  --bg-card: #ffffff;
+  --bg-muted: #FAFAFA;
+  --bg-subtle: #FAFAFC;
+  --bg-tab-bar: #EDEDF5;
+  --bg-tab-active: #ffffff;
+  --bg-input: #FAFAFA;
+  --bg-hover: #F5F5FA;
+  --border: #EAEAF0;
+  --border-light: #E8E8F0;
+  --border-faint: #F0F0F8;
+  --text: #1A1A2E;
+  --text-secondary: #555555;
+  --text-muted: #888888;
+  --text-faint: #AAAAAA;
+  --text-tab-inactive: #999999;
+  --text-disabled: #CCCCCC;
+  --accent: #5238C4;
+  --accent-light: #7F77DD;
+  --accent-gradient-start: #8B83E8;
+  --shadow: rgba(0, 0, 0, 0.1);
+  --shadow-strong: rgba(0, 0, 0, 0.12);
+  --info-bg: #EDE9FF;
+  --info-border: #C4B8F5;
+  --info-text: #4A3F8A;
+  --success-bg: #E0F5EE;
+  --success-border: #7DD4B5;
+  --success-text: #0B5C40;
+  --success-text-light: #1D9E75;
+  --warn-bg: #FAEEDA;
+  --warn-border: #FAC775;
+  --warn-text: #854F0B;
+  --err-bg: #FCEBEB;
+  --err-border: #F09595;
+  --err-text: #A32D2D;
+  --danger-bg: #FFF0F0;
+  --danger-text: #D85A30;
+  --danger-border: #F5B98A;
+  --text-on-accent: #ffffff;
+  --personal-bg: #F5F5FA;
+  --personal-text: #666666;
+  --today-col-bg: #F0FBF7;
+  --today-header-start: #1D9E75;
+  --today-header-end: #0B5C40;
+  --block-catedra-bg: #E8F4FD;
+  --block-catedra-text: #0D4A82;
+  --block-catedra-border: #8CC4EE;
+  --block-ayudantia-bg: #FAEEDA;
+  --block-ayudantia-text: #854F0B;
+  --block-ayudantia-border: #FAC775;
+  --block-lab-bg: #E0F5EE;
+  --block-lab-text: #0B5C40;
+  --block-lab-border: #7DD4B5;
+  --block-default-bg: #EDE9FF;
+  --block-default-text: #4A3F8A;
+  --block-default-border: #C4B8F5;
+  --scrollbar: #D0CCF0;
+}
+
+html.theme-dark {
+  color-scheme: dark;
+  --bg-page: #0F0F14;
+  --bg-card: #1A1A24;
+  --bg-muted: #22222E;
+  --bg-subtle: #1E1E28;
+  --bg-tab-bar: #252532;
+  --bg-tab-active: #2E2E3C;
+  --bg-input: #22222E;
+  --bg-hover: #2A2A38;
+  --border: #2E2E3A;
+  --border-light: #333340;
+  --border-faint: #2A2A36;
+  --text: #F0F0F5;
+  --text-secondary: #B8B8C8;
+  --text-muted: #8888A0;
+  --text-faint: #666680;
+  --text-tab-inactive: #777788;
+  --text-disabled: #444455;
+  --accent: #8B83E8;
+  --accent-light: #A59EF0;
+  --accent-gradient-start: #9B93F0;
+  --shadow: rgba(0, 0, 0, 0.35);
+  --shadow-strong: rgba(0, 0, 0, 0.5);
+  --info-bg: #2A2840;
+  --info-border: #4A4570;
+  --info-text: #C4B8F5;
+  --success-bg: #152820;
+  --success-border: #1D6E55;
+  --success-text: #7DD4B5;
+  --success-text-light: #5DCAA5;
+  --warn-bg: #2A2210;
+  --warn-border: #6B5018;
+  --warn-text: #FAC775;
+  --err-bg: #2A1515;
+  --err-border: #6B3030;
+  --err-text: #F09595;
+  --danger-bg: #2A1818;
+  --danger-text: #F09580;
+  --danger-border: #6B4030;
+  --text-on-accent: #ffffff;
+  --personal-bg: #252530;
+  --personal-text: #9999AA;
+  --today-col-bg: #152820;
+  --today-header-start: #1D9E75;
+  --today-header-end: #0B5C40;
+  --block-catedra-bg: #152535;
+  --block-catedra-text: #8CC4EE;
+  --block-catedra-border: #2A5080;
+  --block-ayudantia-bg: #2A2210;
+  --block-ayudantia-text: #FAC775;
+  --block-ayudantia-border: #6B5018;
+  --block-lab-bg: #152820;
+  --block-lab-text: #7DD4B5;
+  --block-lab-border: #1D6E55;
+  --block-default-bg: #2A2840;
+  --block-default-text: #C4B8F5;
+  --block-default-border: #4A4570;
+  --scrollbar: #3A3A50;
+}
+
 html, body {
   height: 100%;
-  background: #F8F7FC;
+  background: var(--bg-page);
+  color: var(--text);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
 input, textarea, select, button {
@@ -17,8 +141,12 @@ input, textarea, select, button {
 }
 
 input[type="range"] {
-  accent-color: #7F77DD;
+  accent-color: var(--accent-light);
   width: 100%;
+}
+
+input, textarea, select {
+  color-scheme: inherit;
 }
 
 ::-webkit-scrollbar {
@@ -26,6 +154,6 @@ input[type="range"] {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #D0CCF0;
+  background: var(--scrollbar);
   border-radius: 2px;
 }

@@ -22,19 +22,28 @@ const LS = {
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2)
 
 const COLORS = [
-  { bg: '#EDE9FF', text: '#4A3F8A', border: '#C4B8F5' },
-  { bg: '#E0F5EE', text: '#0B5C40', border: '#7DD4B5' },
-  { bg: '#FEF0E6', text: '#7A3510', border: '#F5B98A' },
-  { bg: '#E8F4FD', text: '#0D4A82', border: '#8CC4EE' },
-  { bg: '#FDF0F5', text: '#7A2040', border: '#E8A0BC' },
+  { bg: 'var(--info-bg)', text: 'var(--info-text)', border: 'var(--info-border)' },
+  { bg: 'var(--success-bg)', text: 'var(--success-text)', border: 'var(--success-border)' },
+  { bg: 'var(--warn-bg)', text: 'var(--warn-text)', border: 'var(--warn-border)' },
+  { bg: 'var(--block-catedra-bg)', text: 'var(--block-catedra-text)', border: 'var(--block-catedra-border)' },
+  { bg: 'var(--err-bg)', text: 'var(--err-text)', border: 'var(--err-border)' },
 ]
-const TAG_COLORS = ['#7F77DD', '#1D9E75', '#D85A30', '#378ADD', '#D4537E']
 
 const TYPE_CFG = {
-  control: { label: 'Control', bg: '#E8F4FD', text: '#0D4A82', border: '#8CC4EE', gcalColor: '5' },
-  solemne: { label: 'Solemne', bg: '#FCEBEB', text: '#A32D2D', border: '#F09595', gcalColor: '11' },
-  tarea:   { label: 'Tarea',   bg: '#FAEEDA', text: '#854F0B', border: '#FAC775', gcalColor: '6' },
-  otro:    { label: 'Otro',    bg: '#EDE9FF', text: '#4A3F8A', border: '#C4B8F5', gcalColor: '1' },
+  control: { label: 'Control', bg: 'var(--block-catedra-bg)', text: 'var(--block-catedra-text)', border: 'var(--block-catedra-border)', gcalColor: '5' },
+  solemne: { label: 'Solemne', bg: 'var(--err-bg)', text: 'var(--err-text)', border: 'var(--err-border)', gcalColor: '11' },
+  tarea:   { label: 'Tarea',   bg: 'var(--warn-bg)', text: 'var(--warn-text)', border: 'var(--warn-border)', gcalColor: '6' },
+  otro:    { label: 'Otro',    bg: 'var(--info-bg)', text: 'var(--info-text)', border: 'var(--info-border)', gcalColor: '1' },
+}
+
+const emptyIconBox = (variant = 'info') => {
+  const v = variant === 'success'
+    ? { bg: 'var(--success-bg)', color: 'var(--success-text-light)' }
+    : { bg: 'var(--info-bg)', color: 'var(--accent-light)' }
+  return {
+    width: 60, height: 60, borderRadius: 18, background: v.bg, display: 'flex',
+    alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', color: v.color,
+  }
 }
 
 const DAY_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -43,10 +52,10 @@ const WEEK_DAYS = [1, 2, 3, 4, 5]
 
 const blockColor = (eventType = '') => {
   const t = normalizeEventType(eventType)
-  if (t.includes('CATEDRA')) return { bg: '#E8F4FD', text: '#0D4A82', border: '#8CC4EE' }
-  if (t.includes('AYUDANTIA')) return { bg: '#FAEEDA', text: '#854F0B', border: '#FAC775' }
-  if (t.includes('LABORATORIO')) return { bg: '#E0F5EE', text: '#0B5C40', border: '#7DD4B5' }
-  return { bg: '#EDE9FF', text: '#4A3F8A', border: '#C4B8F5' }
+  if (t.includes('CATEDRA')) return { bg: 'var(--block-catedra-bg)', text: 'var(--block-catedra-text)', border: 'var(--block-catedra-border)' }
+  if (t.includes('AYUDANTIA')) return { bg: 'var(--block-ayudantia-bg)', text: 'var(--block-ayudantia-text)', border: 'var(--block-ayudantia-border)' }
+  if (t.includes('LABORATORIO')) return { bg: 'var(--block-lab-bg)', text: 'var(--block-lab-text)', border: 'var(--block-lab-border)' }
+  return { bg: 'var(--block-default-bg)', text: 'var(--block-default-text)', border: 'var(--block-default-border)' }
 }
 
 const timeToMins = (t) => {
@@ -157,24 +166,24 @@ const Icon = ({ name, size = 20 }) => {
 // ─── Shared styles ────────────────────────────────────────────────────────────
 const inputSt = {
   width: '100%', padding: '10px 12px', borderRadius: 10,
-  border: '1.5px solid #E8E8F0', fontSize: 14, color: '#1A1A2E',
-  background: '#FAFAFA', outline: 'none', fontFamily: 'inherit',
+  border: '1.5px solid var(--border-light)', fontSize: 14, color: 'var(--text)',
+  background: 'var(--bg-input)', outline: 'none', fontFamily: 'inherit',
 }
 const primaryBtn = {
   flex: 1, padding: '10px 16px', borderRadius: 10, border: 'none',
-  background: '#5238C4', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+  background: 'var(--accent)', color: 'var(--text-on-accent)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
 }
 const secondaryBtn = {
-  padding: '10px 16px', borderRadius: 10, border: '1.5px solid #E8E8F0',
-  background: '#fff', color: '#555', fontSize: 14, fontWeight: 500, cursor: 'pointer',
+  padding: '10px 16px', borderRadius: 10, border: '1.5px solid var(--border-light)',
+  background: 'var(--bg-card)', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 500, cursor: 'pointer',
 }
 
 // ─── Progress Bar ─────────────────────────────────────────────────────────────
 const ProgressBar = ({ value }) => (
-  <div style={{ background: '#E8E8F0', borderRadius: 99, height: 6, overflow: 'hidden' }}>
+  <div style={{ background: 'var(--border-light)', borderRadius: 99, height: 6, overflow: 'hidden' }}>
     <div style={{
       width: `${Math.min(100, value)}%`, height: '100%',
-      background: value >= 100 ? '#1D9E75' : '#7F77DD',
+      background: value >= 100 ? 'var(--success-text-light)' : 'var(--accent-light)',
       borderRadius: 99, transition: 'width 0.4s ease',
     }} />
   </div>
@@ -186,8 +195,8 @@ function GoalForm({ onSave, onClose, colorIdx }) {
   const [desc, setDesc] = useState('')
 
   return (
-    <div style={{ background: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, border: '1px solid #EAEAF0' }}>
-      <p style={{ fontWeight: 700, fontSize: 15, color: '#1A1A2E', marginBottom: 12 }}>Nuevo objetivo</p>
+    <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 16, marginBottom: 16, border: '1px solid var(--border)' }}>
+      <p style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)', marginBottom: 12 }}>Nuevo objetivo</p>
       <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Nombre del objetivo *" style={inputSt} />
       <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="Descripción (opcional)" rows={2}
         style={{ ...inputSt, resize: 'vertical', marginTop: 8, lineHeight: 1.5 }} />
@@ -235,7 +244,7 @@ function GoalDetail({ goal, setGoals, setSelectedGoal, showToast }) {
   return (
     <div>
       <button onClick={() => setSelectedGoal(null)}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7F77DD', fontSize: 13, fontWeight: 600, padding: '0 0 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-light)', fontSize: 13, fontWeight: 600, padding: '0 0 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
         <Icon name="back" size={16} /> Todos los objetivos
       </button>
 
@@ -259,8 +268,8 @@ function GoalDetail({ goal, setGoals, setSelectedGoal, showToast }) {
         </div>
       </div>
 
-      <div style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 16, border: '1px solid #EAEAF0' }}>
-        <p style={{ fontWeight: 600, fontSize: 14, color: '#1A1A2E', marginBottom: 10 }}>Registrar avance</p>
+      <div style={{ background: 'var(--bg-card)', borderRadius: 14, padding: 14, marginBottom: 16, border: '1px solid var(--border)' }}>
+        <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 10 }}>Registrar avance</p>
         <textarea value={noteText} onChange={e => setNoteText(e.target.value)}
           placeholder="¿Qué avanzaste? Escribe tu nota aquí..." rows={3}
           style={{ ...inputSt, resize: 'vertical', lineHeight: 1.5 }} />
@@ -273,34 +282,34 @@ function GoalDetail({ goal, setGoals, setSelectedGoal, showToast }) {
       {(goal.notes || []).length === 0 && (
         <div style={{ textAlign: 'center', padding: '24px 0' }}>
           <Icon name="note" size={32} />
-          <p style={{ marginTop: 8, fontSize: 13, color: '#AAA' }}>Sin avances aún. ¡Empieza a registrar!</p>
+          <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-faint)' }}>Sin avances aún. ¡Empieza a registrar!</p>
         </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {[...(goal.notes || [])].reverse().map(note => (
           <div key={note.id} style={{
-            background: '#fff', borderRadius: 12, padding: '11px 13px',
-            border: `1px solid ${note.done ? '#B3E8D5' : '#EAEAF0'}`,
+            background: 'var(--bg-card)', borderRadius: 12, padding: '11px 13px',
+            border: `1px solid ${note.done ? 'var(--success-border)' : 'var(--border)'}`,
             display: 'flex', gap: 10, alignItems: 'flex-start',
           }}>
             <button onClick={() => toggleNote(note.id)} style={{
               width: 22, height: 22, borderRadius: '50%', flexShrink: 0, cursor: 'pointer', marginTop: 1,
-              border: note.done ? 'none' : '2px solid #CCC',
-              background: note.done ? '#1D9E75' : 'transparent',
+              border: note.done ? 'none' : '2px solid var(--text-disabled)',
+              background: note.done ? 'var(--success-text-light)' : 'transparent',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: '#fff', transition: 'all 0.2s',
+              color: 'var(--text-on-accent)', transition: 'all 0.2s',
             }}>
               {note.done && <Icon name="check" size={11} />}
             </button>
             <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 14, color: note.done ? '#AAA' : '#1A1A2E', textDecoration: note.done ? 'line-through' : 'none', lineHeight: 1.5 }}>{note.text}</p>
-              <p style={{ marginTop: 4, fontSize: 11, color: '#BBB' }}>
+              <p style={{ fontSize: 14, color: note.done ? 'var(--text-faint)' : 'var(--text)', textDecoration: note.done ? 'line-through' : 'none', lineHeight: 1.5 }}>{note.text}</p>
+              <p style={{ marginTop: 4, fontSize: 11, color: 'var(--text-disabled)' }}>
                 {new Date(note.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
             <button onClick={() => deleteNote(note.id)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DDD', padding: 2, flexShrink: 0 }}>
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-disabled)', padding: 2, flexShrink: 0 }}>
               <Icon name="trash" size={13} />
             </button>
           </div>
@@ -330,11 +339,11 @@ function GoalsTab({ goals, setGoals, selectedGoal, setSelectedGoal, showGoalForm
 
       {goals.length === 0 && !showGoalForm && (
         <div style={{ textAlign: 'center', padding: '48px 0' }}>
-          <div style={{ width: 60, height: 60, borderRadius: 18, background: '#EDE9FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', color: '#7F77DD' }}>
+          <div style={emptyIconBox()}>
             <Icon name="star" size={28} />
           </div>
-          <p style={{ fontWeight: 700, fontSize: 16, color: '#1A1A2E' }}>Sin objetivos aún</p>
-          <p style={{ marginTop: 6, fontSize: 13, color: '#AAA', lineHeight: 1.6 }}>
+          <p style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>Sin objetivos aún</p>
+          <p style={{ marginTop: 6, fontSize: 13, color: 'var(--text-faint)', lineHeight: 1.6 }}>
             Crea tu primer objetivo a largo plazo<br />y registra tus avances en él.
           </p>
         </div>
@@ -348,16 +357,16 @@ function GoalsTab({ goals, setGoals, selectedGoal, setSelectedGoal, showGoalForm
           const pct = total ? Math.round(done / total * 100) : 0
           return (
             <div key={goal.id} onClick={() => setSelectedGoal(goal.id)}
-              style={{ background: '#fff', borderRadius: 16, padding: '14px 16px', border: '1px solid #EAEAF0', cursor: 'pointer' }}>
+              style={{ background: 'var(--bg-card)', borderRadius: 16, padding: '14px 16px', border: '1px solid var(--border)', cursor: 'pointer' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
                 <div style={{ width: 38, height: 38, borderRadius: 11, background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.text, flexShrink: 0 }}>
                   <Icon name="target" size={18} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontWeight: 600, fontSize: 15, color: '#1A1A2E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{goal.title}</p>
-                  <p style={{ marginTop: 2, fontSize: 12, color: '#AAA' }}>{total} avances · {pct}% completado</p>
+                  <p style={{ fontWeight: 600, fontSize: 15, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{goal.title}</p>
+                  <p style={{ marginTop: 2, fontSize: 12, color: 'var(--text-faint)' }}>{total} avances · {pct}% completado</p>
                 </div>
-                <div style={{ color: '#DDD', marginTop: 4 }}><Icon name="chevron" size={16} /></div>
+                <div style={{ color: 'var(--text-disabled)', marginTop: 4 }}><Icon name="chevron" size={16} /></div>
               </div>
               <ProgressBar value={pct} />
             </div>
@@ -421,8 +430,8 @@ function EventForm({ onSave, onClose, schedule, courseOptions }) {
   const canSave = title.trim() && date && (!isUniversity || courseCode)
 
   return (
-    <div style={{ background: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, border: '1px solid #EAEAF0' }}>
-      <p style={{ fontWeight: 700, fontSize: 15, color: '#1A1A2E', marginBottom: 12 }}>Nuevo evento</p>
+    <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 16, marginBottom: 16, border: '1px solid var(--border)' }}>
+      <p style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)', marginBottom: 12 }}>Nuevo evento</p>
       <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
         {Object.entries(TYPE_CFG).map(([id, cfg]) => (
           <button key={id} onClick={() => {
@@ -431,8 +440,8 @@ function EventForm({ onSave, onClose, schedule, courseOptions }) {
             if (id === 'otro') { setCourseCode(''); setAutoSlot(null) }
           }} style={{
             flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            background: type === id ? '#7F77DD' : '#F0F0F7',
-            color: type === id ? '#fff' : '#888',
+            background: type === id ? 'var(--accent-light)' : 'var(--bg-tab-bar)',
+            color: type === id ? 'var(--text-on-accent)' : 'var(--text-muted)',
           }}>{cfg.label}</button>
         ))}
       </div>
@@ -449,7 +458,7 @@ function EventForm({ onSave, onClose, schedule, courseOptions }) {
             ))}
           </select>
           {courseOptions.length === 0 && (
-            <p style={{ marginTop: 8, fontSize: 12, color: '#D85A30', lineHeight: 1.4 }}>
+            <p style={{ marginTop: 8, fontSize: 12, color: 'var(--danger-text)', lineHeight: 1.4 }}>
               Agrega ramos en <strong>Config</strong> para vincular controles y solemnes a tu horario.
             </p>
           )}
@@ -458,7 +467,7 @@ function EventForm({ onSave, onClose, schedule, courseOptions }) {
           {autoSlot && (
             <div style={{
               marginTop: 8, padding: '10px 12px', borderRadius: 10,
-              background: '#E0F5EE', border: '1px solid #7DD4B5', fontSize: 12, color: '#0B5C40',
+              background: 'var(--success-bg)', border: '1px solid var(--success-border)', fontSize: 12, color: 'var(--success-text)',
             }}>
               <strong>Horario del ramo:</strong> {DAY_NAMES[autoSlot.day]} {autoSlot.startTime}–{autoSlot.endTime}
               {autoSlot.professor && ` · ${autoSlot.professor.split(' ').slice(0, 2).join(' ')}`}
@@ -466,13 +475,13 @@ function EventForm({ onSave, onClose, schedule, courseOptions }) {
           )}
 
           {courseCode && date && !autoSlot && schedule.length > 0 && (
-            <p style={{ marginTop: 8, fontSize: 12, color: '#D85A30', lineHeight: 1.4 }}>
+            <p style={{ marginTop: 8, fontSize: 12, color: 'var(--danger-text)', lineHeight: 1.4 }}>
               No hay clase de «{selectedCourse?.name}» ese día. Ajusta la hora manualmente.
             </p>
           )}
 
           {courseCode && date && !autoSlot && schedule.length === 0 && (
-            <p style={{ marginTop: 8, fontSize: 12, color: '#888', lineHeight: 1.4 }}>
+            <p style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>
               Genera tu horario en <strong>Config</strong> para auto-asignar la hora del ramo.
             </p>
           )}
@@ -481,7 +490,7 @@ function EventForm({ onSave, onClose, schedule, courseOptions }) {
         <>
           <div style={{
             marginTop: 8, padding: '10px 12px', borderRadius: 10,
-            background: '#F5F5FA', border: '1px solid #E8E8F0', fontSize: 12, color: '#666', lineHeight: 1.5,
+            background: 'var(--personal-bg)', border: '1px solid var(--border-light)', fontSize: 12, color: 'var(--personal-text)', lineHeight: 1.5,
           }}>
             Evento personal — fuera de la universidad. Elige fecha y hora libremente.
           </div>
@@ -493,13 +502,13 @@ function EventForm({ onSave, onClose, schedule, courseOptions }) {
         <input type="time" value={time}
           onChange={e => { setTime(e.target.value); if (isUniversity) { setTimeManual(true); setAutoSlot(null) } }}
           style={inputSt} />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#888' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
           {time ? `${duration} min` : 'Sin hora'}
         </div>
       </div>
       <div style={{ marginTop: 10 }}>
-        <label style={{ fontSize: 12, color: '#888', fontWeight: 500 }}>
-          Duración: <strong style={{ color: '#5238C4' }}>{duration} min</strong>
+        <label style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>
+          Duración: <strong style={{ color: 'var(--accent)' }}>{duration} min</strong>
         </label>
         <input type="range" min={15} max={240} step={15} value={duration}
           onChange={e => { setDuration(+e.target.value); if (isUniversity) setTimeManual(true) }} />
@@ -524,47 +533,47 @@ function EventCard({ ev, onSync, onDelete, gToken, past }) {
   const daysUntil = past ? null : Math.ceil((new Date(ev.date) - new Date()) / 86400000)
 
   return (
-    <div style={{ background: past ? '#FAFAFA' : '#fff', borderRadius: 14, padding: '12px 14px', border: `1px solid ${past ? '#EAEAF0' : cfg.border}`, opacity: past ? 0.75 : 1 }}>
+    <div style={{ background: past ? 'var(--bg-muted)' : 'var(--bg-card)', borderRadius: 14, padding: '12px 14px', border: `1px solid ${past ? 'var(--border)' : cfg.border}`, opacity: past ? 0.75 : 1 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <div style={{ background: cfg.bg, borderRadius: 8, padding: '5px 9px', flexShrink: 0, marginTop: 2 }}>
           <p style={{ fontSize: 10, fontWeight: 700, color: cfg.text, textTransform: 'uppercase', letterSpacing: 0.5 }}>{cfg.label}</p>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontWeight: 600, fontSize: 14, color: '#1A1A2E', lineHeight: 1.3 }}>{ev.title}</p>
+          <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', lineHeight: 1.3 }}>{ev.title}</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, color: '#888' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               {new Date(ev.date + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'short', day: 'numeric', month: 'short' })}
             </span>
-            {ev.time && <span style={{ fontSize: 12, color: '#888' }}>· {ev.time}h</span>}
+            {ev.time && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>· {ev.time}h</span>}
             {ev.fromSchedule && (
-              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: '#E0F5EE', color: '#0B5C40', fontWeight: 600 }}>
+              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: 'var(--success-bg)', color: 'var(--success-text)', fontWeight: 600 }}>
                 Horario
               </span>
             )}
             {(ev.type === 'otro' || ev.isPersonal) && (
-              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: '#F5F5FA', color: '#666', fontWeight: 600 }}>
+              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: 'var(--personal-bg)', color: 'var(--personal-text)', fontWeight: 600 }}>
                 Personal
               </span>
             )}
             {daysUntil !== null && daysUntil <= 7 && daysUntil >= 0 && (
               <span style={{
                 fontSize: 11, padding: '2px 8px', borderRadius: 99, fontWeight: 700,
-                background: daysUntil <= 2 ? '#FCEBEB' : '#FAEEDA',
-                color: daysUntil <= 2 ? '#A32D2D' : '#854F0B',
+                background: daysUntil <= 2 ? 'var(--err-bg)' : 'var(--warn-bg)',
+                color: daysUntil <= 2 ? 'var(--err-text)' : 'var(--warn-text)',
               }}>
                 {daysUntil === 0 ? 'Hoy' : daysUntil === 1 ? 'Mañana' : `${daysUntil}d`}
               </span>
             )}
           </div>
-          {ev.description && <p style={{ marginTop: 4, fontSize: 12, color: '#AAA', lineHeight: 1.4 }}>{ev.description}</p>}
+          {ev.description && <p style={{ marginTop: 4, fontSize: 12, color: 'var(--text-faint)', lineHeight: 1.4 }}>{ev.description}</p>}
         </div>
       </div>
 
       {!past && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 10, paddingTop: 10, borderTop: '1px solid #F0F0F8' }}>
+        <div style={{ display: 'flex', gap: 6, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border-faint)' }}>
           {gToken && !ev.synced && (
             <button onClick={onSync} style={{
-              flex: 1, background: '#EDE9FF', color: '#5238C4', border: 'none', borderRadius: 8,
+              flex: 1, background: 'var(--info-bg)', color: 'var(--accent)', border: 'none', borderRadius: 8,
               padding: '7px 0', fontSize: 12, fontWeight: 600, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
             }}>
@@ -572,22 +581,22 @@ function EventCard({ ev, onSync, onDelete, gToken, past }) {
             </button>
           )}
           {ev.synced && (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 12, color: '#1D9E75', fontWeight: 600 }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 12, color: 'var(--success-text-light)', fontWeight: 600 }}>
               <Icon name="check" size={13} /> En Google Calendar
             </div>
           )}
           {!gToken && !ev.synced && (
-            <div style={{ flex: 1, fontSize: 11, color: '#AAA', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ flex: 1, fontSize: 11, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 4 }}>
               <Icon name="google" size={12} /> Conecta GCal para sincronizar
             </div>
           )}
-          <button onClick={onDelete} style={{ background: '#FFF0F0', color: '#D85A30', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, cursor: 'pointer' }}>
+          <button onClick={onDelete} style={{ background: 'var(--danger-bg)', color: 'var(--danger-text)', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, cursor: 'pointer' }}>
             <Icon name="trash" size={14} />
           </button>
         </div>
       )}
       {past && (
-        <button onClick={onDelete} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#CCC', padding: '6px 0 0', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <button onClick={onDelete} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-disabled)', padding: '6px 0 0', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
           <Icon name="trash" size={11} /> Eliminar
         </button>
       )}
@@ -613,21 +622,21 @@ function WeeklyGrid({ schedule, onRemove, now }) {
     return (
       <div style={{
         background: c.bg,
-        border: active ? '2px solid #5238C4' : `1px solid ${c.border}`,
+        border: active ? '2px solid var(--accent)' : `1px solid ${c.border}`,
         borderRadius: 8, padding: compact ? '5px 4px' : '8px 8px', position: 'relative',
-        boxShadow: active ? '0 0 0 3px rgba(82,56,196,0.2)' : 'none',
+        boxShadow: active ? '0 0 0 3px var(--shadow)' : 'none',
       }}>
         {active && (
           <span style={{
-            position: 'absolute', top: -6, right: 4, background: '#5238C4', color: '#fff',
+            position: 'absolute', top: -6, right: 4, background: 'var(--accent)', color: 'var(--text-on-accent)',
             fontSize: 7, fontWeight: 800, padding: '1px 5px', borderRadius: 99, letterSpacing: 0.5,
           }}>AHORA</span>
         )}
         {!compact && onRemove && (
           <button type="button" onClick={() => onRemove(block.id)}
             style={{
-              position: 'absolute', top: 4, right: 4, background: 'rgba(255,255,255,0.7)',
-              border: 'none', borderRadius: 4, padding: 2, cursor: 'pointer', color: '#D85A30', lineHeight: 0,
+              position: 'absolute', top: 4, right: 4, background: 'color-mix(in srgb, var(--bg-card) 75%, transparent)',
+              border: 'none', borderRadius: 4, padding: 2, cursor: 'pointer', color: 'var(--danger-text)', lineHeight: 0,
             }}>
             <Icon name="trash" size={10} />
           </button>
@@ -667,22 +676,22 @@ function WeeklyGrid({ schedule, onRemove, now }) {
             <div style={{
               textAlign: 'center', padding: '7px 2px',
               background: isToday
-                ? 'linear-gradient(135deg, #1D9E75, #0B5C40)'
-                : 'linear-gradient(135deg, #8B83E8, #5238C4)',
-              color: '#fff', borderRadius: '10px 10px 0 0',
+                ? 'linear-gradient(135deg, var(--today-header-start), var(--today-header-end))'
+                : 'linear-gradient(135deg, var(--accent-gradient-start), var(--accent))',
+              color: 'var(--text-on-accent)', borderRadius: '10px 10px 0 0',
               fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
               boxShadow: isToday ? '0 2px 8px rgba(29,158,117,0.35)' : 'none',
             }}>
               {DAY_SHORT[day]}{isToday ? ' ●' : ''}
             </div>
             <div style={{
-              background: isToday ? '#F0FBF7' : '#FAFAFC',
-              border: `1px solid ${isToday ? '#7DD4B5' : '#E8E8F0'}`, borderTop: 'none',
+              background: isToday ? 'var(--today-col-bg)' : 'var(--bg-subtle)',
+              border: `1px solid ${isToday ? 'var(--success-border)' : 'var(--border)'}`, borderTop: 'none',
               borderRadius: '0 0 10px 10px', minHeight: 72, padding: 4,
               display: 'flex', flexDirection: 'column', gap: 4,
             }}>
               {blocks.length === 0 ? (
-                <p style={{ fontSize: 10, color: '#D0D0D8', textAlign: 'center', padding: '20px 0', margin: 'auto' }}>—</p>
+                <p style={{ fontSize: 10, color: 'var(--text-disabled)', textAlign: 'center', padding: '20px 0', margin: 'auto' }}>—</p>
               ) : blocks.map(block => (
                 <BlockCard key={block.id} block={block} compact />
               ))}
@@ -697,7 +706,7 @@ function WeeklyGrid({ schedule, onRemove, now }) {
           { label: 'Ayudantía', ...blockColor('AYUDANTIA') },
           { label: 'Laboratorio', ...blockColor('LABORATORIO') },
         ].map(item => (
-          <span key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: '#888' }}>
+          <span key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text-muted)' }}>
             <span style={{ width: 10, height: 10, borderRadius: 3, background: item.bg, border: `1px solid ${item.border}` }} />
             {item.label}
           </span>
@@ -706,7 +715,7 @@ function WeeklyGrid({ schedule, onRemove, now }) {
 
       {extraDays.map(({ day, blocks }) => (
         <div key={day} style={{ marginTop: 16 }}>
-          <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: '#AAA', textTransform: 'uppercase', letterSpacing: 1 }}>
+          <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 1 }}>
             {DAY_NAMES[day]}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -733,8 +742,8 @@ function ScheduleForm({ onSave, onClose }) {
   }
 
   return (
-    <div style={{ background: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, border: '1px solid #EAEAF0' }}>
-      <p style={{ fontWeight: 700, fontSize: 15, color: '#1A1A2E', marginBottom: 12 }}>Agregar clase al horario</p>
+    <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 16, marginBottom: 16, border: '1px solid var(--border)' }}>
+      <p style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)', marginBottom: 12 }}>Agregar clase al horario</p>
       <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Asignatura * (ej: Cálculo)" style={inputSt} />
       <select value={day} onChange={e => setDay(e.target.value)} style={{ ...inputSt, marginTop: 8 }}>
         {[1, 2, 3, 4, 5, 6].map(d => (
@@ -743,11 +752,11 @@ function ScheduleForm({ onSave, onClose }) {
       </select>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
         <div>
-          <label style={{ fontSize: 11, color: '#888', fontWeight: 600 }}>Inicio</label>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Inicio</label>
           <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} style={{ ...inputSt, marginTop: 4 }} />
         </div>
         <div>
-          <label style={{ fontSize: 11, color: '#888', fontWeight: 600 }}>Fin</label>
+          <label style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Fin</label>
           <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} style={{ ...inputSt, marginTop: 4 }} />
         </div>
       </div>
@@ -768,6 +777,7 @@ function ScheduleForm({ onSave, onClose }) {
 function ConfigTab({
   schedule, setSchedule, offering, setOffering,
   myCourses, setMyCourses, sectionSelections, setSectionSelections,
+  darkMode, setDarkMode,
   showToast, onScheduleGenerated,
 }) {
   const fileRef = useRef(null)
@@ -858,18 +868,47 @@ function ConfigTab({
   return (
     <div>
       <div style={{
-        background: '#EDE9FF', borderRadius: 14, padding: '12px 14px', marginBottom: 16,
-        border: '1px solid #C4B8F5', fontSize: 12, color: '#4A3F8A', lineHeight: 1.5,
+        background: 'var(--bg-card)', borderRadius: 14, padding: 14, marginBottom: 16,
+        border: '1px solid var(--border)', display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', gap: 12,
+      }}>
+        <div>
+          <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>Modo noche</p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>Interfaz oscura para toda la app</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={darkMode}
+          onClick={() => setDarkMode(!darkMode)}
+          style={{
+            width: 50, height: 28, borderRadius: 99, border: 'none', cursor: 'pointer',
+            padding: 2, flexShrink: 0, background: darkMode ? 'var(--accent)' : 'var(--border-light)',
+            transition: 'background 0.2s',
+          }}
+        >
+          <span style={{
+            display: 'block', width: 24, height: 24, borderRadius: '50%', background: 'var(--text-on-accent)',
+            transform: darkMode ? 'translateX(22px)' : 'translateX(0)',
+            transition: 'transform 0.2s',
+            boxShadow: '0 1px 4px var(--shadow)',
+          }} />
+        </button>
+      </div>
+
+      <div style={{
+        background: 'var(--info-bg)', borderRadius: 14, padding: '12px 14px', marginBottom: 16,
+        border: '1px solid var(--info-border)', fontSize: 12, color: 'var(--info-text)', lineHeight: 1.5,
       }}>
         Configura tu semestre aquí. Más opciones se agregarán pronto.
       </div>
 
       <div style={{
-        background: '#fff', borderRadius: 14, padding: 14, marginBottom: 16,
-        border: '1px solid #EAEAF0',
+        background: 'var(--bg-card)', borderRadius: 14, padding: 14, marginBottom: 16,
+        border: '1px solid var(--border)',
       }}>
-        <p style={{ fontWeight: 700, fontSize: 14, color: '#1A1A2E', marginBottom: 8 }}>Oferta académica</p>
-        <p style={{ fontSize: 12, color: '#888', lineHeight: 1.5, marginBottom: 12 }}>
+        <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 8 }}>Oferta académica</p>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 12 }}>
           Exporta tu oferta desde Excel como CSV y súbela aquí. Luego busca y agrega solo los ramos que cursas.
         </p>
         <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" onChange={handleFile} style={{ display: 'none' }} />
@@ -880,13 +919,13 @@ function ConfigTab({
             <Icon name="upload" size={15} /> Cargar CSV
           </button>
           {offering && (
-            <button onClick={clearOffering} style={{ ...secondaryBtn, padding: '9px 14px', color: '#D85A30', borderColor: '#F5B98A' }}>
+            <button onClick={clearOffering} style={{ ...secondaryBtn, padding: '9px 14px', color: 'var(--danger-text)', borderColor: 'var(--danger-border)' }}>
               Eliminar oferta
             </button>
           )}
         </div>
         {offering && (
-          <p style={{ marginTop: 10, fontSize: 12, color: '#0B5C40', background: '#E0F5EE', padding: '8px 10px', borderRadius: 8 }}>
+          <p style={{ marginTop: 10, fontSize: 12, color: 'var(--success-text)', background: 'var(--success-bg)', padding: '8px 10px', borderRadius: 8 }}>
             <strong>{offering.fileName}</strong> · {offering.courseList.length} en oferta · {myCourses.length} en tu semestre
             {myCourses.length > 0 && ` · ${myCourses.filter(c => sectionSelections[c]).length} con sección`}
           </p>
@@ -894,9 +933,9 @@ function ConfigTab({
       </div>
 
       {offering && (
-        <div style={{ background: '#fff', borderRadius: 14, padding: 14, marginBottom: 16, border: '1px solid #EAEAF0' }}>
-          <p style={{ fontWeight: 700, fontSize: 14, color: '#1A1A2E', marginBottom: 4 }}>Mis ramos</p>
-          <p style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Busca un ramo, agrégalo y elige tu sección.</p>
+        <div style={{ background: 'var(--bg-card)', borderRadius: 14, padding: 14, marginBottom: 16, border: '1px solid var(--border)' }}>
+          <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 4 }}>Mis ramos</p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>Busca un ramo, agrégalo y elige tu sección.</p>
 
           <div style={{ position: 'relative', marginBottom: 14 }}>
             <input
@@ -911,8 +950,8 @@ function ConfigTab({
             {searchOpen && search.trim() && searchResults.length > 0 && (
               <div style={{
                 position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: 4,
-                background: '#fff', borderRadius: 12, border: '1px solid #E8E8F0',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.1)', overflow: 'hidden',
+                background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border-light)',
+                boxShadow: '0 8px 24px var(--shadow)', overflow: 'hidden',
               }}>
                 {searchResults.map(course => (
                   <button
@@ -922,11 +961,11 @@ function ConfigTab({
                     onClick={() => addCourse(course.code)}
                     style={{
                       width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none',
-                      background: '#fff', cursor: 'pointer', borderBottom: '1px solid #F5F5F8',
+                      background: 'var(--bg-card)', cursor: 'pointer', borderBottom: '1px solid var(--border-faint)',
                     }}
                   >
-                    <p style={{ fontWeight: 600, fontSize: 13, color: '#1A1A2E' }}>{course.name}</p>
-                    <p style={{ fontSize: 11, color: '#AAA', marginTop: 2 }}>
+                    <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{course.name}</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>
                       {course.code}{course.credits ? ` · ${course.credits} créditos` : ''}
                       · {Object.keys(course.sections).length} secciones
                     </p>
@@ -937,8 +976,8 @@ function ConfigTab({
             {searchOpen && search.trim() && searchResults.length === 0 && (
               <div style={{
                 position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: 4,
-                background: '#fff', borderRadius: 12, border: '1px solid #E8E8F0', padding: '12px',
-                fontSize: 12, color: '#AAA', boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+                background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border-light)', padding: '12px',
+                fontSize: 12, color: 'var(--text-faint)', boxShadow: '0 8px 24px var(--shadow)',
               }}>
                 No se encontraron ramos
               </div>
@@ -947,10 +986,10 @@ function ConfigTab({
 
           {myCourses.length === 0 && (
             <div style={{
-              textAlign: 'center', padding: '24px 12px', background: '#FAFAFA',
-              borderRadius: 12, border: '1px dashed #E0E0EA', marginBottom: 14,
+              textAlign: 'center', padding: '24px 12px', background: 'var(--bg-muted)',
+              borderRadius: 12, border: '1px dashed var(--border-light)', marginBottom: 14,
             }}>
-              <p style={{ fontSize: 13, color: '#AAA', lineHeight: 1.5 }}>
+              <p style={{ fontSize: 13, color: 'var(--text-faint)', lineHeight: 1.5 }}>
                 Usa el buscador para agregar<br />los ramos de tu semestre.
               </p>
             </div>
@@ -968,11 +1007,11 @@ function ConfigTab({
               return (
                 <div key={course.code} style={{
                   display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-                  padding: '10px 12px', background: '#FAFAFA', borderRadius: 10, border: '1px solid #F0F0F8',
+                  padding: '10px 12px', background: 'var(--bg-muted)', borderRadius: 10, border: '1px solid var(--border-faint)',
                 }}>
                   <div style={{ flex: 1, minWidth: 100 }}>
-                    <p style={{ fontWeight: 600, fontSize: 13, color: '#1A1A2E' }}>{course.name}</p>
-                    <p style={{ fontSize: 11, color: '#AAA' }}>{course.code}{course.credits ? ` · ${course.credits} créditos` : ''}</p>
+                    <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{course.name}</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-faint)' }}>{course.code}{course.credits ? ` · ${course.credits} créditos` : ''}</p>
                   </div>
                   <select
                     value={sectionSelections[course.code] || ''}
@@ -987,7 +1026,7 @@ function ConfigTab({
                   <button
                     type="button"
                     onClick={() => removeCourse(course.code)}
-                    style={{ background: '#FFF0F0', color: '#D85A30', border: 'none', borderRadius: 8, padding: '8px 10px', cursor: 'pointer', flexShrink: 0 }}
+                    style={{ background: 'var(--danger-bg)', color: 'var(--danger-text)', border: 'none', borderRadius: 8, padding: '8px 10px', cursor: 'pointer', flexShrink: 0 }}
                     title="Quitar ramo"
                   >
                     <Icon name="trash" size={14} />
@@ -1025,36 +1064,36 @@ function ScheduleTab({ schedule, setSchedule, showScheduleForm, setShowScheduleF
     <div>
       {schedule.length > 0 && (
         <div style={{
-          background: current ? '#E0F5EE' : '#fff',
+          background: current ? 'var(--success-bg)' : 'var(--bg-card)',
           borderRadius: 14, padding: '14px 16px', marginBottom: 16,
-          border: `1px solid ${current ? '#7DD4B5' : '#EAEAF0'}`,
+          border: `1px solid ${current ? 'var(--success-border)' : 'var(--border)'}`,
         }}>
           {current ? (
             <>
-              <p style={{ fontSize: 10, fontWeight: 800, color: '#1D9E75', letterSpacing: 1, marginBottom: 6 }}>EN CLASE AHORA</p>
-              <p style={{ fontWeight: 700, fontSize: 16, color: '#0B5C40', lineHeight: 1.3 }}>{current.subject}</p>
-              <p style={{ marginTop: 4, fontSize: 13, color: '#0B5C40' }}>
+              <p style={{ fontSize: 10, fontWeight: 800, color: 'var(--success-text-light)', letterSpacing: 1, marginBottom: 6 }}>EN CLASE AHORA</p>
+              <p style={{ fontWeight: 700, fontSize: 16, color: 'var(--success-text)', lineHeight: 1.3 }}>{current.subject}</p>
+              <p style={{ marginTop: 4, fontSize: 13, color: 'var(--success-text)' }}>
                 {shortEventType(current.eventType)} · {current.startTime}–{current.endTime}
                 {current.professor && ` · ${current.professor.split(' ').slice(0, 2).join(' ')}`}
               </p>
             </>
           ) : isWeekend ? (
             <>
-              <p style={{ fontSize: 10, fontWeight: 700, color: '#AAA', letterSpacing: 1, marginBottom: 4 }}>HOY</p>
-              <p style={{ fontWeight: 600, fontSize: 14, color: '#666' }}>Fin de semana — sin clases</p>
+              <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1, marginBottom: 4 }}>HOY</p>
+              <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-secondary)' }}>Fin de semana — sin clases</p>
             </>
           ) : next ? (
             <>
-              <p style={{ fontSize: 10, fontWeight: 700, color: '#888', letterSpacing: 1, marginBottom: 4 }}>SIN CLASE AHORA</p>
-              <p style={{ fontWeight: 600, fontSize: 14, color: '#1A1A2E' }}>Próxima: {next.subject}</p>
-              <p style={{ marginTop: 4, fontSize: 12, color: '#888' }}>
+              <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 1, marginBottom: 4 }}>SIN CLASE AHORA</p>
+              <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>Próxima: {next.subject}</p>
+              <p style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)' }}>
                 {shortEventType(next.eventType)} a las {next.startTime}
               </p>
             </>
           ) : (
             <>
-              <p style={{ fontSize: 10, fontWeight: 700, color: '#888', letterSpacing: 1, marginBottom: 4 }}>HOY</p>
-              <p style={{ fontWeight: 600, fontSize: 14, color: '#666' }}>Sin más clases hoy</p>
+              <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 1, marginBottom: 4 }}>HOY</p>
+              <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-secondary)' }}>Sin más clases hoy</p>
             </>
           )}
         </div>
@@ -1073,11 +1112,11 @@ function ScheduleTab({ schedule, setSchedule, showScheduleForm, setShowScheduleF
 
       {schedule.length === 0 && !showScheduleForm && (
         <div style={{ textAlign: 'center', padding: '48px 0' }}>
-          <div style={{ width: 60, height: 60, borderRadius: 18, background: '#E0F5EE', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', color: '#1D9E75' }}>
+          <div style={emptyIconBox('success')}>
             <Icon name="book" size={28} />
           </div>
-          <p style={{ fontWeight: 700, fontSize: 16, color: '#1A1A2E' }}>Sin horario</p>
-          <p style={{ marginTop: 6, fontSize: 13, color: '#AAA', lineHeight: 1.6 }}>
+          <p style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>Sin horario</p>
+          <p style={{ marginTop: 6, fontSize: 13, color: 'var(--text-faint)', lineHeight: 1.6 }}>
             Ve a <strong>Config</strong> para cargar tu oferta,<br />elegir ramos y generar el horario.
           </p>
           {onOpenSettings && (
@@ -1090,7 +1129,7 @@ function ScheduleTab({ schedule, setSchedule, showScheduleForm, setShowScheduleF
 
       {schedule.length > 0 && (
         <>
-          <p style={{ margin: '0 0 12px', fontSize: 11, fontWeight: 700, color: '#AAA', textTransform: 'uppercase', letterSpacing: 1 }}>
+          <p style={{ margin: '0 0 12px', fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 1 }}>
             Mi horario semanal
           </p>
           <WeeklyGrid
@@ -1116,27 +1155,27 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
   return (
     <div>
       <div style={{
-        background: gToken ? '#E0F5EE' : '#EDE9FF', borderRadius: 14, padding: '12px 14px',
+        background: gToken ? 'var(--success-bg)' : 'var(--info-bg)', borderRadius: 14, padding: '12px 14px',
         marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10,
-        border: `1px solid ${gToken ? '#7DD4B5' : '#C4B8F5'}`,
+        border: `1px solid ${gToken ? 'var(--success-border)' : 'var(--info-border)'}`,
       }}>
-        <div style={{ color: gToken ? '#1D9E75' : '#7F77DD' }}>
+        <div style={{ color: gToken ? 'var(--success-text-light)' : 'var(--accent-light)' }}>
           <Icon name={gToken ? 'check' : 'google'} size={20} />
         </div>
         <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 13, fontWeight: 700, color: gToken ? '#0B5C40' : '#4A3F8A' }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: gToken ? 'var(--success-text)' : 'var(--info-text)' }}>
             {gToken ? 'Google Calendar conectado' : 'Conectar Google Calendar'}
           </p>
-          <p style={{ marginTop: 2, fontSize: 11, color: gToken ? '#1D9E75' : '#7F77DD' }}>
+          <p style={{ marginTop: 2, fontSize: 11, color: gToken ? 'var(--success-text-light)' : 'var(--accent-light)' }}>
             {gToken ? 'Los eventos nuevos se sincronizan solos' : 'Conecta para sincronizar automáticamente'}
           </p>
         </div>
         {gToken ? (
-          <button onClick={disconnectGoogle} style={{ background: 'none', border: '1px solid #7DD4B5', borderRadius: 9, padding: '6px 10px', fontSize: 11, color: '#0B5C40', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button onClick={disconnectGoogle} style={{ background: 'none', border: '1px solid var(--success-border)', borderRadius: 9, padding: '6px 10px', fontSize: 11, color: 'var(--success-text)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
             <Icon name="logout" size={13} /> Salir
           </button>
         ) : (
-          <button onClick={connectGoogle} style={{ background: '#7F77DD', color: '#fff', border: 'none', borderRadius: 9, padding: '7px 13px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          <button onClick={connectGoogle} style={{ background: 'var(--accent-light)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 9, padding: '7px 13px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             Conectar
           </button>
         )}
@@ -1153,11 +1192,11 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
 
       {events.length === 0 && !showEventForm && (
         <div style={{ textAlign: 'center', padding: '48px 0' }}>
-          <div style={{ width: 60, height: 60, borderRadius: 18, background: '#EDE9FF', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px', color: '#7F77DD' }}>
+          <div style={emptyIconBox()}>
             <Icon name="calendar" size={28} />
           </div>
-          <p style={{ fontWeight: 700, fontSize: 16, color: '#1A1A2E' }}>Sin eventos</p>
-          <p style={{ marginTop: 6, fontSize: 13, color: '#AAA', lineHeight: 1.6 }}>
+          <p style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>Sin eventos</p>
+          <p style={{ marginTop: 6, fontSize: 13, color: 'var(--text-faint)', lineHeight: 1.6 }}>
             Agrega tus controles, solemnes y tareas<br />para tenerlos todos organizados.
           </p>
         </div>
@@ -1165,7 +1204,7 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
 
       {upcoming.length > 0 && (
         <>
-          <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: '#AAA', textTransform: 'uppercase', letterSpacing: 1 }}>Próximos ({upcoming.length})</p>
+          <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 1 }}>Próximos ({upcoming.length})</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
             {upcoming.map(ev => (
               <EventCard key={ev.id} ev={ev} gToken={gToken}
@@ -1178,7 +1217,7 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
 
       {past.length > 0 && (
         <>
-          <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: '#AAA', textTransform: 'uppercase', letterSpacing: 1 }}>Pasados ({past.length})</p>
+          <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 1 }}>Pasados ({past.length})</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {past.map(ev => (
               <EventCard key={ev.id} ev={ev} gToken={gToken} past
@@ -1206,6 +1245,7 @@ export default function App() {
   const [showScheduleForm, setShowScheduleForm] = useState(false)
   const [gToken, setGToken] = useState(() => LS.get('g_access_token', null))
   const [gapiReady, setGapiReady] = useState(false)
+  const [darkMode, setDarkMode] = useState(() => LS.get('app_dark_mode', false))
   const [toast, setToast] = useState(null)
   const tokenClientRef = useRef(null)
 
@@ -1215,6 +1255,11 @@ export default function App() {
   useEffect(() => { LS.set('app_offering_v1', offering) }, [offering])
   useEffect(() => { LS.set('app_my_courses_v1', myCourses) }, [myCourses])
   useEffect(() => { LS.set('app_section_sel_v1', sectionSelections) }, [sectionSelections])
+  useEffect(() => {
+    LS.set('app_dark_mode', darkMode)
+    document.documentElement.classList.toggle('theme-dark', darkMode)
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', darkMode ? '#0F0F14' : '#5238C4')
+  }, [darkMode])
 
   const showToast = (msg, type = 'ok') => {
     setToast({ msg, type })
@@ -1357,23 +1402,23 @@ export default function App() {
   const courseOptions = getCourseOptions(offering, myCourses, schedule)
 
   return (
-    <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", maxWidth: 480, margin: '0 auto', minHeight: '100vh', background: '#F8F7FC' }}>
+    <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", maxWidth: 480, margin: '0 auto', minHeight: '100vh', background: 'var(--bg-page)', color: 'var(--text)' }}>
 
       {toast && (
         <div style={{
           position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 999,
-          background: toast.type === 'err' ? '#FCEBEB' : toast.type === 'warn' ? '#FAEEDA' : '#E0F5EE',
-          color: toast.type === 'err' ? '#A32D2D' : toast.type === 'warn' ? '#854F0B' : '#0B5C40',
+          background: toast.type === 'err' ? 'var(--err-bg)' : toast.type === 'warn' ? 'var(--warn-bg)' : 'var(--success-bg)',
+          color: toast.type === 'err' ? 'var(--err-text)' : toast.type === 'warn' ? 'var(--warn-text)' : 'var(--success-text)',
           padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600,
-          border: `1px solid ${toast.type === 'err' ? '#F09595' : toast.type === 'warn' ? '#FAC775' : '#5DCAA5'}`,
-          boxShadow: '0 4px 24px rgba(0,0,0,0.12)', whiteSpace: 'nowrap', pointerEvents: 'none',
+          border: `1px solid ${toast.type === 'err' ? 'var(--err-border)' : toast.type === 'warn' ? 'var(--warn-border)' : 'var(--success-border)'}`,
+          boxShadow: '0 4px 24px var(--shadow-strong)', whiteSpace: 'nowrap', pointerEvents: 'none',
         }}>{toast.msg}</div>
       )}
 
-      <div style={{ padding: '22px 18px 0', background: '#F8F7FC' }}>
-        <p style={{ fontSize: 10, fontWeight: 700, color: '#AAA', letterSpacing: 1.5, textTransform: 'uppercase' }}>Mi Centro</p>
-        <h1 style={{ margin: '2px 0 16px', fontSize: 26, fontWeight: 800, color: '#1A1A2E', letterSpacing: -0.8 }}>Organización</h1>
-        <div style={{ display: 'flex', gap: 3, background: '#EDEDF5', borderRadius: 13, padding: 4 }}>
+      <div style={{ padding: '22px 18px 0', background: 'var(--bg-page)' }}>
+        <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1.5, textTransform: 'uppercase' }}>Mi Centro</p>
+        <h1 style={{ margin: '2px 0 16px', fontSize: 26, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.8 }}>Organización</h1>
+        <div style={{ display: 'flex', gap: 3, background: 'var(--bg-tab-bar)', borderRadius: 13, padding: 4 }}>
           {[
             { id: 'goals', label: 'Metas', icon: 'target' },
             { id: 'schedule', label: 'Horario', icon: 'book' },
@@ -1383,9 +1428,9 @@ export default function App() {
             <button key={t.id} onClick={() => onTabChange(t.id)} style={{
               flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
               padding: '8px 0', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600,
-              background: tab === t.id ? '#fff' : 'transparent',
-              color: tab === t.id ? '#5238C4' : '#999',
-              boxShadow: tab === t.id ? '0 1px 6px rgba(0,0,0,0.1)' : 'none',
+              background: tab === t.id ? 'var(--bg-tab-active)' : 'transparent',
+              color: tab === t.id ? 'var(--accent)' : 'var(--text-tab-inactive)',
+              boxShadow: tab === t.id ? '0 1px 6px var(--shadow)' : 'none',
               transition: 'all 0.18s',
             }}>
               <Icon name={t.icon} size={13} />
@@ -1408,6 +1453,7 @@ export default function App() {
             offering={offering} setOffering={setOffering}
             myCourses={myCourses} setMyCourses={setMyCourses}
             sectionSelections={sectionSelections} setSectionSelections={setSectionSelections}
+            darkMode={darkMode} setDarkMode={setDarkMode}
             showToast={showToast} onScheduleGenerated={() => setTab('schedule')} />
         ) : (
           <CalendarTab events={events} setEvents={setEvents} schedule={schedule} courseOptions={courseOptions}
@@ -1423,9 +1469,9 @@ export default function App() {
         style={{
           position: 'fixed', bottom: 24, right: 20,
           width: 54, height: 54, borderRadius: '50%', border: 'none',
-          background: 'linear-gradient(135deg, #8B83E8, #5238C4)',
-          color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', boxShadow: '0 4px 20px rgba(82,56,196,0.4)',
+          background: 'linear-gradient(135deg, var(--accent-gradient-start), var(--accent))',
+          color: 'var(--text-on-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', boxShadow: '0 4px 20px var(--shadow-strong)',
         }}>
         <Icon name="plus" size={22} />
       </button>
