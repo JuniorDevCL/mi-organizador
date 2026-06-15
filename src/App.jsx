@@ -5,6 +5,7 @@ import {
   shortEventType,
   normalizeEventType,
 } from './offeringParser'
+import PluxeeTab from './PluxeeTab'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Google Calendar — define VITE_GOOGLE_CLIENT_ID en .env.local o en Netlify
@@ -176,6 +177,7 @@ const Icon = ({ name, size = 20 }) => {
     book:     <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></>,
     upload:   <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
     settings: <><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></>,
+    map:     <><path d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></>,
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -1455,6 +1457,7 @@ export default function App() {
             { id: 'goals', label: 'Metas', icon: 'target' },
             { id: 'schedule', label: 'Horario', icon: 'book' },
             { id: 'calendar', label: 'Agenda', icon: 'calendar' },
+            { id: 'pluxee', label: 'Pluxee', icon: 'map' },
             { id: 'settings', label: 'Config', icon: 'settings' },
           ].map(t => (
             <button key={t.id} onClick={() => onTabChange(t.id)} style={{
@@ -1487,6 +1490,8 @@ export default function App() {
             sectionSelections={sectionSelections} setSectionSelections={setSectionSelections}
             darkMode={darkMode} setDarkMode={setDarkMode}
             showToast={showToast} onScheduleGenerated={() => setTab('schedule')} />
+        ) : tab === 'pluxee' ? (
+          <PluxeeTab />
         ) : (
           <CalendarTab events={events} setEvents={setEvents} schedule={schedule} courseOptions={courseOptions}
             gToken={gToken} connectGoogle={connectGoogle} disconnectGoogle={disconnectGoogle}
@@ -1495,7 +1500,7 @@ export default function App() {
         )}
       </div>
 
-      {tab !== 'settings' && (
+      {tab !== 'settings' && tab !== 'pluxee' && (
       <button
         onClick={openFab}
         style={{

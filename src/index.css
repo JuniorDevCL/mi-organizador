@@ -157,3 +157,15 @@ input, textarea, select {
   background: var(--scrollbar);
   border-radius: 2px;
 }
+
+.leaflet-container {
+  background: var(--bg-muted);
+  font-family: inherit;
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: 0 4px 16px var(--shadow-strong);
+}
