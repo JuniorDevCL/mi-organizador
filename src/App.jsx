@@ -752,42 +752,155 @@ function WeeklyGrid({ schedule, onRemove, now }) {
     )
   }
 
+  const timelineBlocks = weekBlocks.flatMap(({ blocks }) => blocks)
+  const earliestStart = timelineBlocks.length
+    ? Math.min(...timelineBlocks.map(block => timeToMins(block.startTime)))
+    : 8 * 60
+  const latestFinish = timelineBlocks.length
+    ? Math.max(...timelineBlocks.map(block => timeToMins(block.endTime)))
+    : 18 * 60
+  const timelineStart = Math.floor(earliestStart / 30) * 30
+  const timelineEnd = Math.ceil(latestFinish / 30) * 30
+  const pixelsPerMinute = 0.72
+  const timelineHeight = Math.max(180, (timelineEnd - timelineStart) * pixelsPerMinute)
+  const timelineMarks = []
+  for (let minute = timelineStart; minute <= timelineEnd; minute += 30) {
+    timelineMarks.push(minute)
+  }
+  const minutesToTime = (minutes) =>
+    `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+
+  const positionOverlappingBlocks = (blocks) => {
+    const columnEnds = []
+    const positioned = blocks.map(block => {
+      const start = timeToMins(block.startTime)
+      let column = columnEnds.findIndex(end => end <= start)
+      if (column === -1) column = columnEnds.length
+      columnEnds[column] = timeToMins(block.endTime)
+      return { block, column }
+    })
+    return positioned.map(item => ({ ...item, columnCount: Math.max(1, columnEnds.length) }))
+  }
+
+  const TimelineBlock = ({ block, column = 0, columnCount = 1 }) => {
+    const c = blockColor(block.eventType)
+    const active = isBlockNow(block, now)
+    const top = (timeToMins(block.startTime) - timelineStart) * pixelsPerMinute
+    const height = Math.max(24, (timeToMins(block.endTime) - timeToMins(block.startTime)) * pixelsPerMinute - 2)
+    const width = `calc(${100 / columnCount}% - 3px)`
+    const left = `calc(${column * 100 / columnCount}% + 2px)`
+
+    return (
+      <div
+        title={`${block.subject} · ${shortEventType(block.eventType)} · ${block.startTime}–${block.endTime}`}
+        style={{
+          position: 'absolute', top, left, width, height,
+          background: c.bg, color: c.text,
+          border: active ? '2px solid var(--accent)' : `1px solid ${c.border}`,
+          borderRadius: 6, padding: '4px 3px', overflow: 'hidden', zIndex: active ? 4 : 3,
+          boxShadow: active ? '0 0 0 2px var(--shadow)' : 'none',
+        }}
+      >
+        <p style={{ fontSize: 8, fontWeight: 800, lineHeight: 1.15, wordBreak: 'break-word' }}>
+          {block.subject}
+        </p>
+        <p style={{ fontSize: 7, fontWeight: 600, marginTop: 2, opacity: 0.9 }}>
+          {block.startTime}–{block.endTime}
+        </p>
+        {height >= 48 && (
+          <p style={{ fontSize: 7, marginTop: 2, opacity: 0.75 }}>{shortEventType(block.eventType)}</p>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div style={{ marginBottom: 20 }}>
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 5,
-      }}>
-        {weekBlocks.map(({ day, blocks }) => {
-          const isToday = day === today
-          return (
-          <div key={day} style={{ minWidth: 0 }}>
-            <div style={{
-              textAlign: 'center', padding: '7px 2px',
-              background: isToday
-                ? 'linear-gradient(135deg, var(--today-header-start), var(--today-header-end))'
-                : 'linear-gradient(135deg, var(--accent-gradient-start), var(--accent))',
-              color: 'var(--text-on-accent)', borderRadius: '10px 10px 0 0',
-              fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
-              boxShadow: isToday ? '0 2px 8px rgba(29,158,117,0.35)' : 'none',
-            }}>
-              {DAY_SHORT[day]}{isToday ? ' ●' : ''}
-            </div>
-            <div style={{
-              background: isToday ? 'var(--today-col-bg)' : 'var(--bg-subtle)',
-              border: `1px solid ${isToday ? 'var(--success-border)' : 'var(--border)'}`, borderTop: 'none',
-              borderRadius: '0 0 10px 10px', minHeight: 72, padding: 4,
-              display: 'flex', flexDirection: 'column', gap: 4,
-            }}>
-              {blocks.length === 0 ? (
-                <p style={{ fontSize: 10, color: 'var(--text-disabled)', textAlign: 'center', padding: '20px 0', margin: 'auto' }}>—</p>
-              ) : getScheduleItems(blocks).map(item => (
-                item.type === 'gap'
-                  ? <GapCard key={item.id} gap={item} compact />
-                  : <BlockCard key={item.id} block={item.block} compact />
-              ))}
-            </div>
+      <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'var(--bg-card)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '44px repeat(5, minmax(0, 1fr))' }}>
+          <div style={{
+            padding: '8px 2px', textAlign: 'center', fontSize: 9, fontWeight: 700,
+            color: 'var(--text-muted)', background: 'var(--bg-tab-bar)',
+          }}>
+            Hora
           </div>
-        )})}
+          {WEEK_DAYS.map(day => {
+            const isToday = day === today
+            return (
+              <div key={day} style={{
+                padding: '8px 2px', textAlign: 'center', fontSize: 10, fontWeight: 700,
+                color: isToday ? 'var(--text-on-accent)' : 'var(--text-secondary)',
+                background: isToday
+                  ? 'linear-gradient(135deg, var(--today-header-start), var(--today-header-end))'
+                  : 'var(--bg-tab-bar)',
+                borderLeft: '1px solid var(--border)',
+              }}>
+                {DAY_SHORT[day]}{isToday ? ' ●' : ''}
+              </div>
+            )
+          })}
+        </div>
+
+        <div style={{ position: 'relative', height: timelineHeight }}>
+          {timelineMarks.map((minute, index) => {
+            const top = (minute - timelineStart) * pixelsPerMinute
+            const showLabel = minute % 60 === 0 || index === 0 || minute === timelineEnd
+            return (
+              <div key={minute}>
+                <div style={{
+                  position: 'absolute', top, left: 44, right: 0,
+                  borderTop: `1px solid ${minute % 60 === 0 ? 'var(--border)' : 'var(--border-faint)'}`,
+                  zIndex: 1,
+                }} />
+                {showLabel && (
+                  <span style={{
+                    position: 'absolute', top: Math.min(top + 2, timelineHeight - 13), left: 3,
+                    width: 37, textAlign: 'right', fontSize: 8, color: 'var(--text-faint)',
+                  }}>
+                    {minutesToTime(minute)}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+
+          <div style={{
+            position: 'absolute', inset: '0 0 0 44px',
+            display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+          }}>
+            {weekBlocks.map(({ day, blocks }) => {
+              const isToday = day === today
+              const gaps = getScheduleItems(blocks).filter(item => item.type === 'gap')
+              return (
+                <div key={day} style={{
+                  position: 'relative', minWidth: 0,
+                  borderLeft: '1px solid var(--border)',
+                  background: isToday ? 'color-mix(in srgb, var(--today-col-bg) 55%, transparent)' : 'transparent',
+                }}>
+                  {gaps.map(gap => {
+                    const top = (timeToMins(gap.startTime) - timelineStart) * pixelsPerMinute
+                    const height = gap.minutes * pixelsPerMinute
+                    return (
+                      <div key={gap.id} title={`Ventana de ${gap.startTime} a ${gap.endTime}`} style={{
+                        position: 'absolute', top: top + 1, left: 2, right: 2, height: Math.max(20, height - 2),
+                        border: '1px dashed var(--success-border)', borderRadius: 5,
+                        background: 'color-mix(in srgb, var(--success-bg) 75%, transparent)',
+                        color: 'var(--success-text)', display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center', textAlign: 'center', zIndex: 2,
+                      }}>
+                        <span style={{ fontSize: 7, fontWeight: 800, textTransform: 'uppercase' }}>Ventana</span>
+                        <span style={{ fontSize: 8, fontWeight: 700 }}>{formatGapDuration(gap.minutes)}</span>
+                      </div>
+                    )
+                  })}
+                  {positionOverlappingBlocks(blocks).map(({ block, column, columnCount }) => (
+                    <TimelineBlock key={block.id} block={block} column={column} columnCount={columnCount} />
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
