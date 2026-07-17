@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "node --test src/*.test.js",
     "fetch:pluxee": "node scripts/fetch-pluxee-santiago.mjs"
   },
   "dependencies": {

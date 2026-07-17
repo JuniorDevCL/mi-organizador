@@ -7,14 +7,34 @@ const padTime = (t) => {
 
 export const parseHorario = (raw) => {
   if (!raw?.trim()) return []
-  const s = raw.trim()
-  const timeMatch = s.match(/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/)
-  if (!timeMatch) return []
-  const startTime = padTime(timeMatch[1])
-  const endTime = padTime(timeMatch[2])
-  const daysPart = s.slice(0, timeMatch.index).trim()
-  const days = daysPart.split(/\s+/).map(d => DAY_ABBR[d.toUpperCase()]).filter(d => d !== undefined)
-  return days.map(day => ({ day, startTime, endTime }))
+  const normalized = raw
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[–—]/g, '-')
+
+  const slots = []
+  const schedulePattern = /((?:(?:LU|MA|MI|JU|VI|SA|DO)(?:\s+|$))+)\s*(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/g
+  let match
+
+  while ((match = schedulePattern.exec(normalized)) !== null) {
+    const startTime = padTime(match[2])
+    const endTime = padTime(match[3])
+    const days = match[1].trim().split(/\s+/)
+
+    for (const abbreviation of days) {
+      const day = DAY_ABBR[abbreviation]
+      if (day !== undefined) slots.push({ day, startTime, endTime })
+    }
+  }
+
+  return slots.filter((slot, index) =>
+    slots.findIndex(candidate =>
+      candidate.day === slot.day
+      && candidate.startTime === slot.startTime
+      && candidate.endTime === slot.endTime
+    ) === index
+  )
 }
 
 const splitLine = (line) => {
@@ -103,13 +123,32 @@ export const parseAcademicOffering = (text, fileName = '') => {
       }
     }
 
-    courses[code].sections[section].events.push({
+    const nextEvent = {
       eventType: eventType || 'CLASE',
       horarioRaw,
       professor: get(row, cols.professor),
       campus: get(row, cols.campus),
       slots,
-    })
+    }
+    const duplicate = courses[code].sections[section].events.find(event =>
+      normalizeEventType(event.eventType) === normalizeEventType(nextEvent.eventType)
+      && event.campus === nextEvent.campus
+      && event.slots.length === nextEvent.slots.length
+      && event.slots.every((slot, index) =>
+        slot.day === nextEvent.slots[index].day
+        && slot.startTime === nextEvent.slots[index].startTime
+        && slot.endTime === nextEvent.slots[index].endTime
+      )
+    )
+
+    if (duplicate) {
+      const professors = [duplicate.professor, nextEvent.professor]
+        .flatMap(value => value ? value.split(' / ') : [])
+        .filter(Boolean)
+      duplicate.professor = [...new Set(professors)].join(' / ')
+    } else {
+      courses[code].sections[section].events.push(nextEvent)
+    }
   }
 
   const courseList = Object.values(courses)
@@ -131,10 +170,10 @@ export const buildScheduleFromOffering = (offering, selections) => {
     const section = course?.sections[sectionLabel]
     if (!section) continue
 
-    for (const event of section.events) {
+    for (const [eventIndex, event] of section.events.entries()) {
       for (const slot of event.slots) {
         blocks.push({
-          id: `${code}-${sectionLabel}-${event.eventType}-${slot.day}-${slot.startTime}`.replace(/\W+/g, '_'),
+          id: `${code}-${sectionLabel}-${eventIndex}-${event.eventType}-${slot.day}-${slot.startTime}-${slot.endTime}`.replace(/\W+/g, '_'),
           subject: course.name,
           courseCode: code,
           courseName: course.name,
