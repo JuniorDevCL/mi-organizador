@@ -5,6 +5,7 @@ import {
   shortEventType,
   normalizeEventType,
 } from './offeringParser'
+import { CURRICULUM, matchSemesterCourses } from './curriculum'
 import PluxeeTab from './PluxeeTab'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -995,8 +996,12 @@ function ConfigTab({
   const searchRef = useRef(null)
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
+  const [selectedSemester, setSelectedSemester] = useState(() => LS.get('app_semester_v1', ''))
 
   const norm = (s) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+  const semesterMatch = offering && selectedSemester
+    ? matchSemesterCourses(offering, selectedSemester)
+    : null
 
   const searchResults = offering && search.trim()
     ? offering.courseList.filter(c => {
@@ -1013,16 +1018,47 @@ function ConfigTab({
     reader.onload = () => {
       try {
         const parsed = parseAcademicOffering(reader.result, file.name)
+        const semesterCourses = selectedSemester
+          ? matchSemesterCourses(parsed, selectedSemester).available
+          : []
         setOffering(parsed)
-        setMyCourses([])
+        setMyCourses(semesterCourses)
         setSectionSelections({})
-        showToast(`${parsed.courseList.length} ramos cargados ✓`)
+        setSchedule(prev => prev.filter(block => !block.fromOffering))
+        showToast(
+          semesterCourses.length
+            ? `${parsed.courseList.length} ramos cargados · ${semesterCourses.length} seleccionados ✓`
+            : `${parsed.courseList.length} ramos cargados ✓`
+        )
       } catch (err) {
         showToast(err.message || 'Error al leer el archivo', 'err')
       }
     }
     reader.readAsText(file, 'UTF-8')
     e.target.value = ''
+  }
+
+  const handleSemesterChange = (value) => {
+    setSelectedSemester(value)
+    LS.set('app_semester_v1', value)
+    if (!value || !offering) return
+
+    const { available, missing } = matchSemesterCourses(offering, value)
+    const nextSelections = Object.fromEntries(
+      available
+        .filter(code => sectionSelections[code])
+        .map(code => [code, sectionSelections[code]])
+    )
+    setMyCourses(available)
+    setSectionSelections(nextSelections)
+    setSchedule(prev => syncOfferingSchedule(offering, available, nextSelections, prev))
+
+    showToast(
+      missing.length
+        ? `${available.length} ramos seleccionados · ${missing.length} no están en esta oferta`
+        : `${available.length} ramos del semestre seleccionados ✓`,
+      missing.length ? 'warn' : 'ok'
+    )
   }
 
   const addCourse = (code) => {
@@ -1074,6 +1110,44 @@ function ConfigTab({
     setSectionSelections({})
     setSchedule(prev => prev.filter(b => !b.fromOffering))
     showToast('Oferta académica eliminada')
+  }
+
+  const selectedSectionEvents = (course) => {
+    const section = course.sections[sectionSelections[course.code]]
+    if (!section) return []
+    return section.events.map((event, index) => {
+      const scheduleText = event.slots
+        .map(slot => `${DAY_SHORT[slot.day] || DAY_NAMES[slot.day]} ${slot.startTime}`)
+        .join(', ')
+      return {
+        id: `${event.eventType}-${index}`,
+        label: shortEventType(event.eventType),
+        scheduleText,
+      }
+    })
+  }
+
+  const scheduleConflicts = []
+  const selectedBlocks = schedule.filter(block => block.fromOffering)
+  for (let i = 0; i < selectedBlocks.length; i++) {
+    for (let j = i + 1; j < selectedBlocks.length; j++) {
+      const first = selectedBlocks[i]
+      const second = selectedBlocks[j]
+      if (
+        first.courseCode !== second.courseCode
+        && first.day === second.day
+        && timeToMins(first.startTime) < timeToMins(second.endTime)
+        && timeToMins(second.startTime) < timeToMins(first.endTime)
+      ) {
+        scheduleConflicts.push({
+          id: `${first.id}-${second.id}`,
+          day: first.day,
+          startTime: first.startTime > second.startTime ? first.startTime : second.startTime,
+          first: first.courseName || first.subject,
+          second: second.courseName || second.subject,
+        })
+      }
+    }
   }
 
   return (
@@ -1144,9 +1218,54 @@ function ConfigTab({
       </div>
 
       {offering && (
+        <div style={{
+          background: 'var(--bg-card)', borderRadius: 14, padding: 14,
+          marginBottom: 16, border: '1px solid var(--border)',
+        }}>
+          <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 4 }}>Semestre de la malla</p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 10 }}>
+            Selecciona tu semestre para cargar automáticamente sus ramos. Inglés y CFG se omiten.
+          </p>
+          <select
+            value={selectedSemester}
+            onChange={e => handleSemesterChange(e.target.value)}
+            style={inputSt}
+          >
+            <option value="">— Selección manual —</option>
+            {CURRICULUM.map(item => (
+              <option key={item.semester} value={item.semester}>
+                Semestre {item.semester} · Año {item.year}
+              </option>
+            ))}
+          </select>
+
+          {semesterMatch && (
+            <div style={{
+              marginTop: 10, padding: '9px 10px', borderRadius: 9,
+              background: semesterMatch.missing.length ? 'var(--warn-bg)' : 'var(--success-bg)',
+              color: semesterMatch.missing.length ? 'var(--warn-text)' : 'var(--success-text)',
+              fontSize: 11, lineHeight: 1.5,
+            }}>
+              <strong>{semesterMatch.available.length} ramos encontrados en la oferta.</strong>
+              {semesterMatch.missing.length > 0 && (
+                <span style={{ display: 'block', marginTop: 2 }}>
+                  No disponibles: {semesterMatch.missing.join(', ')}
+                </span>
+              )}
+              {semesterMatch.plan?.note && (
+                <span style={{ display: 'block', marginTop: 2 }}>{semesterMatch.plan.note}</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {offering && (
         <div style={{ background: 'var(--bg-card)', borderRadius: 14, padding: 14, marginBottom: 16, border: '1px solid var(--border)' }}>
           <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 4 }}>Mis ramos</p>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>Busca un ramo, agrégalo y elige tu sección.</p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+            Elige una sección por ramo. El horario se actualiza inmediatamente.
+          </p>
 
           <div style={{ position: 'relative', marginBottom: 14 }}>
             <input
@@ -1242,15 +1361,47 @@ function ConfigTab({
                   >
                     <Icon name="trash" size={14} />
                   </button>
+                  {sectionSelections[course.code] && (
+                    <div style={{
+                      width: '100%', display: 'flex', flexWrap: 'wrap', gap: 5,
+                      paddingTop: 8, borderTop: '1px solid var(--border-faint)',
+                    }}>
+                      {selectedSectionEvents(course).map(event => (
+                        <span key={event.id} style={{
+                          padding: '3px 7px', borderRadius: 99,
+                          background: 'var(--info-bg)', color: 'var(--info-text)',
+                          fontSize: 9, fontWeight: 600,
+                        }}>
+                          {event.label} · {event.scheduleText}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )
             })}
           </div>
 
           {myCourses.length > 0 && (
-            <button onClick={applySections} style={{ ...primaryBtn, marginTop: 14, width: '100%' }}>
-              Generar mi horario
-            </button>
+            <>
+              {scheduleConflicts.length > 0 && (
+                <div style={{
+                  marginTop: 12, padding: '9px 10px', borderRadius: 9,
+                  background: 'var(--err-bg)', border: '1px solid var(--err-border)',
+                  color: 'var(--err-text)', fontSize: 11, lineHeight: 1.5,
+                }}>
+                  <strong>{scheduleConflicts.length} choque(s) de horario</strong>
+                  {scheduleConflicts.slice(0, 3).map(conflict => (
+                    <span key={conflict.id} style={{ display: 'block', marginTop: 2 }}>
+                      {DAY_SHORT[conflict.day]} {conflict.startTime} · {conflict.first} / {conflict.second}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <button onClick={applySections} style={{ ...primaryBtn, marginTop: 14, width: '100%' }}>
+                Ver mi horario
+              </button>
+            </>
           )}
         </div>
       )}
