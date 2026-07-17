@@ -644,6 +644,66 @@ function WeeklyGrid({ schedule, onRemove, now }) {
     blocks: schedule.filter(s => s.day === day).sort((a, b) => a.startTime.localeCompare(b.startTime)),
   })).filter(d => d.blocks.length > 0)
 
+  const formatGapDuration = (minutes) => {
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    if (hours && mins) return `${hours}h ${mins}m`
+    if (hours) return `${hours}h`
+    return `${mins}m`
+  }
+
+  const getScheduleItems = (blocks) => {
+    const items = []
+    let latestEnd = null
+
+    blocks.forEach((block, index) => {
+      const start = timeToMins(block.startTime)
+      const end = timeToMins(block.endTime)
+      const gapMinutes = latestEnd === null ? 0 : start - latestEnd
+
+      if (gapMinutes >= 30) {
+        items.push({
+          type: 'gap',
+          id: `gap-${index}-${latestEnd}-${start}`,
+          startTime: `${String(Math.floor(latestEnd / 60)).padStart(2, '0')}:${String(latestEnd % 60).padStart(2, '0')}`,
+          endTime: block.startTime,
+          minutes: gapMinutes,
+        })
+      }
+
+      items.push({ type: 'block', id: block.id, block })
+      latestEnd = latestEnd === null ? end : Math.max(latestEnd, end)
+    })
+
+    return items
+  }
+
+  const GapCard = ({ gap, compact }) => (
+    <div
+      title={`Ventana de ${gap.startTime} a ${gap.endTime}`}
+      style={{
+        padding: compact ? '5px 2px' : '7px 8px',
+        borderRadius: 8,
+        border: '1px dashed var(--success-border)',
+        background: 'var(--success-bg)',
+        color: 'var(--success-text)',
+        textAlign: 'center',
+      }}
+    >
+      <p style={{ fontSize: compact ? 7 : 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+        Ventana
+      </p>
+      <p style={{ fontSize: compact ? 9 : 11, fontWeight: 700, marginTop: 1 }}>
+        {formatGapDuration(gap.minutes)}
+      </p>
+      {!compact && (
+        <p style={{ fontSize: 9, opacity: 0.8, marginTop: 2 }}>
+          {gap.startTime}–{gap.endTime}
+        </p>
+      )}
+    </div>
+  )
+
   const BlockCard = ({ block, compact }) => {
     const c = blockColor(block.eventType)
     const active = isBlockNow(block, now)
@@ -720,8 +780,10 @@ function WeeklyGrid({ schedule, onRemove, now }) {
             }}>
               {blocks.length === 0 ? (
                 <p style={{ fontSize: 10, color: 'var(--text-disabled)', textAlign: 'center', padding: '20px 0', margin: 'auto' }}>—</p>
-              ) : blocks.map(block => (
-                <BlockCard key={block.id} block={block} compact />
+              ) : getScheduleItems(blocks).map(item => (
+                item.type === 'gap'
+                  ? <GapCard key={item.id} gap={item} compact />
+                  : <BlockCard key={item.id} block={item.block} compact />
               ))}
             </div>
           </div>
@@ -739,6 +801,10 @@ function WeeklyGrid({ schedule, onRemove, now }) {
             {item.label}
           </span>
         ))}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text-muted)' }}>
+          <span style={{ width: 10, height: 10, borderRadius: 3, background: 'var(--success-bg)', border: '1px dashed var(--success-border)' }} />
+          Ventana ≥30 min
+        </span>
       </div>
 
       {extraDays.map(({ day, blocks }) => (
@@ -747,7 +813,11 @@ function WeeklyGrid({ schedule, onRemove, now }) {
             {DAY_NAMES[day]}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {blocks.map(block => <BlockCard key={block.id} block={block} />)}
+            {getScheduleItems(blocks).map(item => (
+              item.type === 'gap'
+                ? <GapCard key={item.id} gap={item} />
+                : <BlockCard key={item.id} block={item.block} />
+            ))}
           </div>
         </div>
       ))}
