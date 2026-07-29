@@ -7,6 +7,16 @@ import {
 } from './offeringParser'
 import { CURRICULUM, matchSemesterCourses } from './curriculum'
 import PluxeeTab from './PluxeeTab'
+import {
+  dateKey,
+  greetingForHour,
+  formatLongDate,
+  ensureDayChecklist,
+  templateAppliesOnDay,
+  ALL_DAYS,
+  WEEKDAY_OPTIONS,
+  EMOJI_OPTIONS,
+} from './checklist'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Google Calendar — define VITE_GOOGLE_CLIENT_ID en .env.local o en Netlify
@@ -22,14 +32,6 @@ const LS = {
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} },
 }
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2)
-
-const COLORS = [
-  { bg: 'var(--info-bg)', text: 'var(--info-text)', border: 'var(--info-border)' },
-  { bg: 'var(--success-bg)', text: 'var(--success-text)', border: 'var(--success-border)' },
-  { bg: 'var(--warn-bg)', text: 'var(--warn-text)', border: 'var(--warn-border)' },
-  { bg: 'var(--block-catedra-bg)', text: 'var(--block-catedra-text)', border: 'var(--block-catedra-border)' },
-  { bg: 'var(--err-bg)', text: 'var(--err-text)', border: 'var(--err-border)' },
-]
 
 const TYPE_CFG = {
   control: { label: 'Control', bg: 'var(--block-catedra-bg)', text: 'var(--block-catedra-text)', border: 'var(--block-catedra-border)', gcalColor: '5' },
@@ -215,189 +217,274 @@ const ProgressBar = ({ value }) => (
   </div>
 )
 
-// ─── Goal Form ────────────────────────────────────────────────────────────────
-function GoalForm({ onSave, onClose, colorIdx }) {
-  const [title, setTitle] = useState('')
-  const [desc, setDesc] = useState('')
+// ─── Checklist Task Form ──────────────────────────────────────────────────────
+function ChecklistTaskForm({ onSave, onClose }) {
+  const [name, setName] = useState('')
+  const [emoji, setEmoji] = useState('✨')
+  const [time, setTime] = useState('')
+  const [mode, setMode] = useState('once') // once | daily | custom
+  const [days, setDays] = useState([1, 2, 3, 4, 5])
+
+  const toggleDay = (d) => {
+    setDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d].sort((a, b) => a - b))
+  }
+
+  const canSave = name.trim() && (mode !== 'custom' || days.length > 0)
+
+  const handleSave = () => {
+    if (!canSave) return
+    onSave({
+      name: name.trim(),
+      emoji,
+      time,
+      recurrence: mode,
+      days: mode === 'once' ? [] : mode === 'daily' ? ALL_DAYS : days,
+    })
+  }
 
   return (
     <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 16, marginBottom: 16, border: '1px solid var(--border)' }}>
-      <p style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)', marginBottom: 12 }}>Nuevo objetivo</p>
-      <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Nombre del objetivo *" style={inputSt} />
-      <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="Descripción (opcional)" rows={2}
-        style={{ ...inputSt, resize: 'vertical', marginTop: 8, lineHeight: 1.5 }} />
+      <p style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)', marginBottom: 12 }}>Nueva tarea</p>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+        {EMOJI_OPTIONS.map(e => (
+          <button key={e} type="button" onClick={() => setEmoji(e)} style={{
+            width: 36, height: 36, borderRadius: 10, fontSize: 18, cursor: 'pointer',
+            border: emoji === e ? '2px solid var(--accent)' : '1.5px solid var(--border-light)',
+            background: emoji === e ? 'var(--info-bg)' : 'var(--bg-muted)',
+          }}>{e}</button>
+        ))}
+      </div>
+
+      <input value={name} onChange={e => setName(e.target.value)} placeholder="Nombre de la tarea *" style={inputSt} />
+      <input type="time" value={time} onChange={e => setTime(e.target.value)}
+        style={{ ...inputSt, marginTop: 8 }} title="Hora opcional" />
+      {!time && (
+        <p style={{ marginTop: 4, fontSize: 11, color: 'var(--text-faint)' }}>Hora opcional</p>
+      )}
+
+      <p style={{ marginTop: 12, marginBottom: 8, fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>Repetición</p>
+      <div style={{ display: 'flex', gap: 5, marginBottom: 10 }}>
+        {[
+          { id: 'once', label: 'Solo hoy' },
+          { id: 'daily', label: 'Todos los días' },
+          { id: 'custom', label: 'Días específicos' },
+        ].map(opt => (
+          <button key={opt.id} type="button" onClick={() => setMode(opt.id)} style={{
+            flex: 1, padding: '7px 4px', borderRadius: 8, border: 'none', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            background: mode === opt.id ? 'var(--accent-light)' : 'var(--bg-tab-bar)',
+            color: mode === opt.id ? 'var(--text-on-accent)' : 'var(--text-muted)',
+          }}>{opt.label}</button>
+        ))}
+      </div>
+
+      {mode === 'custom' && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10, justifyContent: 'center' }}>
+          {WEEKDAY_OPTIONS.map(d => (
+            <button key={d.value} type="button" onClick={() => toggleDay(d.value)} style={{
+              width: 34, height: 34, borderRadius: 10, border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              background: days.includes(d.value) ? 'var(--accent)' : 'var(--bg-tab-bar)',
+              color: days.includes(d.value) ? 'var(--text-on-accent)' : 'var(--text-muted)',
+            }}>{d.label}</button>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-        <button onClick={() => { if (title.trim()) onSave({ id: uid(), title, desc, notes: [], colorIdx, createdAt: Date.now() }) }}
-          style={{ ...primaryBtn, opacity: title.trim() ? 1 : 0.5 }}>
-          Crear objetivo
+        <button type="button" onClick={handleSave} disabled={!canSave}
+          style={{ ...primaryBtn, opacity: canSave ? 1 : 0.5 }}>
+          Crear tarea
         </button>
-        <button onClick={onClose} style={secondaryBtn}>Cancelar</button>
+        <button type="button" onClick={onClose} style={secondaryBtn}>Cancelar</button>
       </div>
     </div>
   )
 }
 
-// ─── Goal Detail ──────────────────────────────────────────────────────────────
-function GoalDetail({ goal, setGoals, setSelectedGoal, showToast }) {
-  const [noteText, setNoteText] = useState('')
-  const c = COLORS[goal.colorIdx % COLORS.length]
+// ─── Checklist Task Row ───────────────────────────────────────────────────────
+function ChecklistTaskRow({ task, onToggle, onDelete }) {
+  return (
+    <div
+      className={task.done ? 'checklist-row checklist-row-done' : 'checklist-row'}
+      style={{
+        background: 'var(--bg-card)',
+        borderRadius: 14,
+        padding: '12px 14px',
+        border: `1px solid ${task.done ? 'var(--success-border)' : 'var(--border)'}`,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        transition: 'border-color 0.25s ease, background 0.25s ease, opacity 0.25s ease',
+        opacity: task.done ? 0.85 : 1,
+      }}
+    >
+      <button
+        type="button"
+        aria-label={task.done ? 'Marcar pendiente' : 'Marcar completada'}
+        onClick={() => onToggle(task.id)}
+        className={task.done ? 'checklist-check checklist-check-on' : 'checklist-check'}
+        style={{
+          width: 32, height: 32, borderRadius: 10, flexShrink: 0, cursor: 'pointer',
+          border: task.done ? 'none' : '2px solid var(--text-disabled)',
+          background: task.done ? 'var(--success-text-light)' : 'transparent',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'var(--text-on-accent)',
+        }}
+      >
+        {task.done && <Icon name="check" size={16} />}
+      </button>
 
-  const addNote = () => {
-    if (!noteText.trim()) return
-    setGoals(prev => prev.map(g => g.id === goal.id
-      ? { ...g, notes: [...(g.notes || []), { id: uid(), text: noteText, done: false, createdAt: Date.now() }] }
-      : g))
-    setNoteText('')
-    showToast('Avance registrado ✓')
-  }
+      <span style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }} aria-hidden>{task.emoji || '✨'}</span>
 
-  const toggleNote = nid => setGoals(prev => prev.map(g =>
-    g.id === goal.id ? { ...g, notes: g.notes.map(n => n.id === nid ? { ...n, done: !n.done } : n) } : g))
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{
+          fontWeight: 600, fontSize: 15, color: task.done ? 'var(--text-faint)' : 'var(--text)',
+          textDecoration: task.done ? 'line-through' : 'none',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          transition: 'color 0.25s ease',
+        }}>{task.name}</p>
+        {task.time && (
+          <p style={{ marginTop: 2, fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Icon name="clock" size={12} /> {task.time}
+          </p>
+        )}
+      </div>
 
-  const deleteNote = nid => setGoals(prev => prev.map(g =>
-    g.id === goal.id ? { ...g, notes: g.notes.filter(n => n.id !== nid) } : g))
+      <button type="button" onClick={() => onDelete(task.id)}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-disabled)', padding: 4, flexShrink: 0 }}
+        aria-label="Eliminar tarea">
+        <Icon name="trash" size={14} />
+      </button>
+    </div>
+  )
+}
 
-  const deleteGoal = () => {
-    setGoals(prev => prev.filter(g => g.id !== goal.id))
-    setSelectedGoal(null)
-    showToast('Objetivo eliminado')
-  }
+// ─── Mi recorrido (daily checklist) ───────────────────────────────────────────
+function JourneyTab({
+  templates, setTemplates, daysMap, setDaysMap,
+  showTaskForm, setShowTaskForm, showToast,
+}) {
+  const [now, setNow] = useState(() => new Date())
 
-  const done = (goal.notes || []).filter(n => n.done).length
-  const total = (goal.notes || []).length
+  useEffect(() => {
+    setNow(new Date())
+    const t = setInterval(() => setNow(new Date()), 60000)
+    return () => clearInterval(t)
+  }, [])
+
+  const today = dateKey(now)
+  const tasks = daysMap[today] || []
+  const done = tasks.filter(t => t.done).length
+  const total = tasks.length
   const pct = total ? Math.round(done / total * 100) : 0
+  const greeting = greetingForHour(now.getHours())
+  const dateLabel = formatLongDate(now)
+
+  const persistToday = (nextTasks) => {
+    setDaysMap(prev => ({ ...prev, [today]: nextTasks }))
+  }
+
+  const toggleTask = (id) => {
+    persistToday(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t))
+  }
+
+  const deleteTask = (id) => {
+    const task = tasks.find(t => t.id === id)
+    persistToday(tasks.filter(t => t.id !== id))
+    if (task?.templateId) {
+      setTemplates(prev => prev.filter(t => t.id !== task.templateId))
+    }
+    showToast('Tarea eliminada')
+  }
+
+  const saveTask = (payload) => {
+    const templateId = payload.recurrence === 'once' ? null : uid()
+    if (payload.recurrence !== 'once') {
+      setTemplates(prev => [...prev, {
+        id: templateId,
+        name: payload.name,
+        emoji: payload.emoji,
+        time: payload.time,
+        recurrence: payload.recurrence,
+        days: payload.days,
+        createdAt: Date.now(),
+      }])
+    }
+
+    const dow = now.getDay()
+    const includeToday = payload.recurrence === 'once'
+      || templateAppliesOnDay({ recurrence: payload.recurrence, days: payload.days }, dow)
+
+    if (includeToday) {
+      const instance = {
+        id: uid(),
+        templateId,
+        name: payload.name,
+        emoji: payload.emoji,
+        time: payload.time,
+        done: false,
+      }
+      const next = [...tasks, instance].sort((a, b) => {
+        if (a.time && b.time) return a.time.localeCompare(b.time)
+        if (a.time) return -1
+        if (b.time) return 1
+        return a.name.localeCompare(b.name, 'es')
+      })
+      persistToday(next)
+    }
+
+    setShowTaskForm(false)
+    showToast('Tarea creada ✓')
+  }
 
   return (
     <div>
-      <button onClick={() => setSelectedGoal(null)}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-light)', fontSize: 13, fontWeight: 600, padding: '0 0 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <Icon name="back" size={16} /> Todos los objetivos
-      </button>
+      <div style={{
+        background: 'var(--bg-card)', borderRadius: 16, padding: 16, marginBottom: 16,
+        border: '1px solid var(--border)',
+      }}>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-light)', marginBottom: 2 }}>{greeting}</p>
+        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.4 }}>Mi recorrido</h2>
+        <p style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)', textTransform: 'capitalize' }}>{dateLabel}</p>
 
-      <div style={{ background: c.bg, borderRadius: 16, padding: 16, marginBottom: 16, border: `1px solid ${c.border}` }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontWeight: 700, fontSize: 18, color: c.text, lineHeight: 1.3 }}>{goal.title}</p>
-            {goal.desc && <p style={{ marginTop: 4, fontSize: 13, color: c.text, opacity: 0.8, lineHeight: 1.5 }}>{goal.desc}</p>}
-          </div>
-          <button onClick={deleteGoal}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: c.text, opacity: 0.4, padding: 4, marginLeft: 8 }}>
-            <Icon name="trash" size={16} />
-          </button>
-        </div>
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: 12, color: c.text, fontWeight: 500 }}>{done}/{total} avances</span>
-            <span style={{ fontSize: 13, color: c.text, fontWeight: 700 }}>{pct}%</span>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
+              {total === 0 ? 'Sin tareas aún' : `${done}/${total} tareas`}
+            </span>
+            {total > 0 && (
+              <span style={{ fontSize: 13, color: 'var(--text)', fontWeight: 700 }}>{pct}%</span>
+            )}
           </div>
           <ProgressBar value={pct} />
         </div>
       </div>
 
-      <div style={{ background: 'var(--bg-card)', borderRadius: 14, padding: 14, marginBottom: 16, border: '1px solid var(--border)' }}>
-        <p style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 10 }}>Registrar avance</p>
-        <textarea value={noteText} onChange={e => setNoteText(e.target.value)}
-          placeholder="¿Qué avanzaste? Escribe tu nota aquí..." rows={3}
-          style={{ ...inputSt, resize: 'vertical', lineHeight: 1.5 }} />
-        <button onClick={addNote} disabled={!noteText.trim()}
-          style={{ ...primaryBtn, marginTop: 8, width: '100%', opacity: noteText.trim() ? 1 : 0.5 }}>
-          + Guardar avance
-        </button>
-      </div>
-
-      {(goal.notes || []).length === 0 && (
-        <div style={{ textAlign: 'center', padding: '24px 0' }}>
-          <Icon name="note" size={32} />
-          <p style={{ marginTop: 8, fontSize: 13, color: 'var(--text-faint)' }}>Sin avances aún. ¡Empieza a registrar!</p>
-        </div>
+      {showTaskForm && (
+        <ChecklistTaskForm onSave={saveTask} onClose={() => setShowTaskForm(false)} />
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {[...(goal.notes || [])].reverse().map(note => (
-          <div key={note.id} style={{
-            background: 'var(--bg-card)', borderRadius: 12, padding: '11px 13px',
-            border: `1px solid ${note.done ? 'var(--success-border)' : 'var(--border)'}`,
-            display: 'flex', gap: 10, alignItems: 'flex-start',
-          }}>
-            <button onClick={() => toggleNote(note.id)} style={{
-              width: 22, height: 22, borderRadius: '50%', flexShrink: 0, cursor: 'pointer', marginTop: 1,
-              border: note.done ? 'none' : '2px solid var(--text-disabled)',
-              background: note.done ? 'var(--success-text-light)' : 'transparent',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-on-accent)', transition: 'all 0.2s',
-            }}>
-              {note.done && <Icon name="check" size={11} />}
-            </button>
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 14, color: note.done ? 'var(--text-faint)' : 'var(--text)', textDecoration: note.done ? 'line-through' : 'none', lineHeight: 1.5 }}>{note.text}</p>
-              <p style={{ marginTop: 4, fontSize: 11, color: 'var(--text-disabled)' }}>
-                {new Date(note.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-              </p>
-            </div>
-            <button onClick={() => deleteNote(note.id)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-disabled)', padding: 2, flexShrink: 0 }}>
-              <Icon name="trash" size={13} />
-            </button>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── Goals Tab ────────────────────────────────────────────────────────────────
-function GoalsTab({ goals, setGoals, selectedGoal, setSelectedGoal, showGoalForm, setShowGoalForm, showToast }) {
-  if (selectedGoal) {
-    const goal = goals.find(g => g.id === selectedGoal)
-    if (!goal) { setSelectedGoal(null); return null }
-    return <GoalDetail goal={goal} setGoals={setGoals} setSelectedGoal={setSelectedGoal} showToast={showToast} />
-  }
-
-  return (
-    <div>
-      {showGoalForm && (
-        <GoalForm
-          colorIdx={goals.length % COLORS.length}
-          onSave={g => { setGoals(p => [g, ...p]); setShowGoalForm(false); showToast('Objetivo creado ✓') }}
-          onClose={() => setShowGoalForm(false)}
-        />
-      )}
-
-      {goals.length === 0 && !showGoalForm && (
-        <div style={{ textAlign: 'center', padding: '48px 0' }}>
+      {tasks.length === 0 && !showTaskForm && (
+        <div style={{ textAlign: 'center', padding: '40px 0' }}>
           <div style={emptyIconBox()}>
-            <Icon name="star" size={28} />
+            <Icon name="check" size={28} />
           </div>
-          <p style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>Sin objetivos aún</p>
+          <p style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>Tu checklist de hoy</p>
           <p style={{ marginTop: 6, fontSize: 13, color: 'var(--text-faint)', lineHeight: 1.6 }}>
-            Crea tu primer objetivo a largo plazo<br />y registra tus avances en él.
+            Agrega tareas diarias o repetitivas<br />con el botón +.
           </p>
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {goals.map((goal, i) => {
-          const c = COLORS[i % COLORS.length]
-          const done = (goal.notes || []).filter(n => n.done).length
-          const total = (goal.notes || []).length
-          const pct = total ? Math.round(done / total * 100) : 0
-          return (
-            <div key={goal.id} onClick={() => setSelectedGoal(goal.id)}
-              style={{ background: 'var(--bg-card)', borderRadius: 16, padding: '14px 16px', border: '1px solid var(--border)', cursor: 'pointer' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 11, background: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.text, flexShrink: 0 }}>
-                  <Icon name="target" size={18} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontWeight: 600, fontSize: 15, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{goal.title}</p>
-                  <p style={{ marginTop: 2, fontSize: 12, color: 'var(--text-faint)' }}>{total} avances · {pct}% completado</p>
-                </div>
-                <div style={{ color: 'var(--text-disabled)', marginTop: 4 }}><Icon name="chevron" size={16} /></div>
-              </div>
-              <ProgressBar value={pct} />
-            </div>
-          )
-        })}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {tasks.map(task => (
+          <ChecklistTaskRow
+            key={task.id}
+            task={task}
+            onToggle={toggleTask}
+            onDelete={deleteTask}
+          />
+        ))}
       </div>
     </div>
   )
@@ -1601,14 +1688,14 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
 // ─── Root App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [tab, setTab] = useState('goals')
-  const [goals, setGoals] = useState(() => LS.get('app_goals_v3', []))
+  const [checklistTemplates, setChecklistTemplates] = useState(() => LS.get('app_checklist_templates_v1', []))
+  const [checklistDays, setChecklistDays] = useState(() => LS.get('app_checklist_days_v1', {}))
   const [events, setEvents] = useState(() => LS.get('app_events_v3', []))
   const [schedule, setSchedule] = useState(() => LS.get('app_schedule_v1', []))
   const [offering, setOffering] = useState(() => LS.get('app_offering_v1', null))
   const [myCourses, setMyCourses] = useState(() => LS.get('app_my_courses_v1', []))
   const [sectionSelections, setSectionSelections] = useState(() => LS.get('app_section_sel_v1', {}))
-  const [selectedGoal, setSelectedGoal] = useState(null)
-  const [showGoalForm, setShowGoalForm] = useState(false)
+  const [showTaskForm, setShowTaskForm] = useState(false)
   const [showEventForm, setShowEventForm] = useState(false)
   const [showScheduleForm, setShowScheduleForm] = useState(false)
   const [gToken, setGToken] = useState(() => LS.get('g_access_token', null))
@@ -1617,7 +1704,13 @@ export default function App() {
   const [toast, setToast] = useState(null)
   const tokenClientRef = useRef(null)
 
-  useEffect(() => { LS.set('app_goals_v3', goals) }, [goals])
+  // Generar checklist del día al montar / al cambiar de día
+  useEffect(() => {
+    setChecklistDays(prev => ensureDayChecklist(checklistTemplates, prev, dateKey(), uid))
+  }, [checklistTemplates])
+
+  useEffect(() => { LS.set('app_checklist_templates_v1', checklistTemplates) }, [checklistTemplates])
+  useEffect(() => { LS.set('app_checklist_days_v1', checklistDays) }, [checklistDays])
   useEffect(() => { LS.set('app_events_v3', events) }, [events])
   useEffect(() => { LS.set('app_schedule_v1', schedule) }, [schedule])
   useEffect(() => { LS.set('app_offering_v1', offering) }, [offering])
@@ -1628,6 +1721,15 @@ export default function App() {
     document.documentElement.classList.toggle('theme-dark', darkMode)
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', darkMode ? '#0F0F14' : '#5238C4')
   }, [darkMode])
+
+  // Si el usuario deja la app abierta past medianoche, regenerar el día
+  useEffect(() => {
+    const tick = () => {
+      setChecklistDays(prev => ensureDayChecklist(checklistTemplates, prev, dateKey(), uid))
+    }
+    const id = setInterval(tick, 60000)
+    return () => clearInterval(id)
+  }, [checklistTemplates])
 
   const showToast = (msg, type = 'ok') => {
     setToast({ msg, type })
@@ -1754,15 +1856,13 @@ export default function App() {
 
   const onTabChange = (t) => {
     setTab(t)
-    setSelectedGoal(null)
-    setShowGoalForm(false)
+    setShowTaskForm(false)
     setShowEventForm(false)
     setShowScheduleForm(false)
   }
 
   const openFab = () => {
-    setSelectedGoal(null)
-    if (tab === 'goals') setShowGoalForm(true)
+    if (tab === 'goals') setShowTaskForm(true)
     else if (tab === 'calendar') setShowEventForm(true)
     else if (tab === 'schedule') setShowScheduleForm(true)
   }
@@ -1788,15 +1888,15 @@ export default function App() {
         <h1 style={{ margin: '2px 0 16px', fontSize: 26, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.8 }}>Organización</h1>
         <div style={{ display: 'flex', gap: 3, background: 'var(--bg-tab-bar)', borderRadius: 13, padding: 4 }}>
           {[
-            { id: 'goals', label: 'Metas', icon: 'target' },
+            { id: 'goals', label: 'Mi recorrido', icon: 'check' },
             { id: 'schedule', label: 'Horario', icon: 'book' },
             { id: 'calendar', label: 'Agenda', icon: 'calendar' },
             { id: 'pluxee', label: 'Pluxee', icon: 'map' },
             { id: 'settings', label: 'Config', icon: 'settings' },
           ].map(t => (
             <button key={t.id} onClick={() => onTabChange(t.id)} style={{
-              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              padding: '8px 0', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 600,
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+              padding: '8px 2px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600,
               background: tab === t.id ? 'var(--bg-tab-active)' : 'transparent',
               color: tab === t.id ? 'var(--accent)' : 'var(--text-tab-inactive)',
               boxShadow: tab === t.id ? '0 1px 6px var(--shadow)' : 'none',
@@ -1811,8 +1911,12 @@ export default function App() {
 
       <div style={{ padding: '16px 18px 100px' }}>
         {tab === 'goals' ? (
-          <GoalsTab goals={goals} setGoals={setGoals} selectedGoal={selectedGoal} setSelectedGoal={setSelectedGoal}
-            showGoalForm={showGoalForm} setShowGoalForm={setShowGoalForm} showToast={showToast} />
+          <JourneyTab
+            templates={checklistTemplates} setTemplates={setChecklistTemplates}
+            daysMap={checklistDays} setDaysMap={setChecklistDays}
+            showTaskForm={showTaskForm} setShowTaskForm={setShowTaskForm}
+            showToast={showToast}
+          />
         ) : tab === 'schedule' ? (
           <ScheduleTab schedule={schedule} setSchedule={setSchedule}
             showScheduleForm={showScheduleForm} setShowScheduleForm={setShowScheduleForm}
