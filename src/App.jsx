@@ -17,13 +17,6 @@ import {
   WEEKDAY_OPTIONS,
   EMOJI_OPTIONS,
 } from './checklist'
-import {
-  SHARED_CALENDAR_EMAIL,
-  CALENDAR_SCOPE,
-  calendarAclResource,
-  isAlreadySharedError,
-  isInsufficientScopeError,
-} from './calendarShare'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Google Calendar — define VITE_GOOGLE_CLIENT_ID en .env.local o en Netlify
@@ -31,7 +24,7 @@ import {
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'TU_CLIENT_ID_AQUI.apps.googleusercontent.com'
 const PLACEHOLDER_CLIENT_ID = 'TU_CLIENT_ID_AQUI.apps.googleusercontent.com'
 const isGoogleConfigured = () => GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== PLACEHOLDER_CLIENT_ID
-const SCOPES = CALENDAR_SCOPE
+const SCOPES = 'https://www.googleapis.com/auth/calendar.events'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const LS = {
@@ -1603,11 +1596,7 @@ function ScheduleTab({ schedule, setSchedule, showScheduleForm, setShowScheduleF
 }
 
 // ─── Calendar Tab ─────────────────────────────────────────────────────────────
-function CalendarTab({
-  events, setEvents, schedule, courseOptions, gToken, connectGoogle, disconnectGoogle,
-  pushToGCal, saveEvent, showToast, showEventForm, setShowEventForm,
-  shareStatus, shareCalendar,
-}) {
+function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, connectGoogle, disconnectGoogle, pushToGCal, saveEvent, showToast, showEventForm, setShowEventForm }) {
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     setNow(new Date())
@@ -1617,7 +1606,6 @@ function CalendarTab({
 
   const upcoming = [...events].filter(e => new Date(e.date + 'T23:59') >= now).sort((a, b) => new Date(a.date) - new Date(b.date))
   const past = [...events].filter(e => new Date(e.date + 'T23:59') < now).sort((a, b) => new Date(b.date) - new Date(a.date))
-  const shared = shareStatus === 'shared'
 
   return (
     <div>
@@ -1645,30 +1633,6 @@ function CalendarTab({
           <button onClick={connectGoogle} style={{ background: 'var(--accent-light)', color: 'var(--text-on-accent)', border: 'none', borderRadius: 9, padding: '7px 13px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             Conectar
           </button>
-        )}
-      </div>
-
-      <div style={{
-        background: shared ? 'var(--success-bg)' : 'var(--bg-card)', borderRadius: 14, padding: '12px 14px',
-        marginBottom: 16, border: `1px solid ${shared ? 'var(--success-border)' : 'var(--border)'}`,
-      }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Acceso de tu amiga</p>
-        <p style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          {shared
-            ? `El calendario ya está compartido con ${SHARED_CALENDAR_EMAIL}. Le llegará una invitación de Google y lo verá en «Otros calendarios».`
-            : `Al conectar, se comparte tu calendario con ${SHARED_CALENDAR_EMAIL} para que pueda ver y agregar eventos.`}
-        </p>
-        {gToken && !shared && (
-          <button type="button" onClick={shareCalendar} style={{
-            ...primaryBtn, marginTop: 10, width: '100%',
-          }}>
-            Compartir ahora
-          </button>
-        )}
-        {!gToken && (
-          <p style={{ marginTop: 8, fontSize: 11, color: 'var(--text-faint)', lineHeight: 1.4 }}>
-            Si Google ya estaba conectado, vuelve a pulsar Conectar y acepta el permiso de calendario.
-          </p>
         )}
       </div>
 
@@ -1736,7 +1700,6 @@ export default function App() {
   const [showScheduleForm, setShowScheduleForm] = useState(false)
   const [gToken, setGToken] = useState(() => LS.get('g_access_token', null))
   const [gapiReady, setGapiReady] = useState(false)
-  const [shareStatus, setShareStatus] = useState(() => LS.get('g_calendar_share_v1', 'pending'))
   const [darkMode, setDarkMode] = useState(() => LS.get('app_dark_mode', false))
   const [toast, setToast] = useState(null)
   const tokenClientRef = useRef(null)
@@ -1753,7 +1716,6 @@ export default function App() {
   useEffect(() => { LS.set('app_offering_v1', offering) }, [offering])
   useEffect(() => { LS.set('app_my_courses_v1', myCourses) }, [myCourses])
   useEffect(() => { LS.set('app_section_sel_v1', sectionSelections) }, [sectionSelections])
-  useEffect(() => { LS.set('g_calendar_share_v1', shareStatus) }, [shareStatus])
   useEffect(() => {
     LS.set('app_dark_mode', darkMode)
     document.documentElement.classList.toggle('theme-dark', darkMode)
@@ -1817,9 +1779,7 @@ export default function App() {
       showToast('Configura VITE_GOOGLE_CLIENT_ID (Netlify o .env.local)', 'warn')
       return
     }
-    tokenClientRef.current?.requestAccessToken({
-      prompt: shareStatus === 'shared' ? '' : 'consent',
-    })
+    tokenClientRef.current?.requestAccessToken()
   }
 
   const disconnectGoogle = () => {
@@ -1830,46 +1790,6 @@ export default function App() {
     LS.set('g_access_token', null)
     showToast('Sesión de Google cerrada')
   }
-
-  const shareCalendar = async ({ quiet = false } = {}) => {
-    if (!gapiReady || !gToken) {
-      if (!quiet) showToast('Conecta Google Calendar primero', 'warn')
-      return false
-    }
-    try {
-      await window.gapi.client.calendar.acl.insert({
-        calendarId: 'primary',
-        sendNotifications: true,
-        resource: calendarAclResource(SHARED_CALENDAR_EMAIL, 'writer'),
-      })
-      setShareStatus('shared')
-      if (!quiet) showToast(`Calendario compartido con ${SHARED_CALENDAR_EMAIL} ✓`)
-      return true
-    } catch (err) {
-      if (isAlreadySharedError(err)) {
-        setShareStatus('shared')
-        if (!quiet) showToast('El calendario ya estaba compartido ✓')
-        return true
-      }
-      if (err.status === 401) {
-        setGToken(null)
-        LS.set('g_access_token', null)
-        showToast('Sesión expirada, vuelve a conectar', 'warn')
-        return false
-      }
-      if (isInsufficientScopeError(err)) {
-        if (!quiet) showToast('Vuelve a conectar Google Calendar y acepta el permiso', 'warn')
-        return false
-      }
-      if (!quiet) showToast('No se pudo compartir el calendario', 'err')
-      return false
-    }
-  }
-
-  useEffect(() => {
-    if (!gapiReady || !gToken || shareStatus === 'shared') return
-    shareCalendar({ quiet: true })
-  }, [gapiReady, gToken])
 
   const insertEventToGCal = async (ev) => {
     const cfg = TYPE_CFG[ev.type] || TYPE_CFG.otro
@@ -2014,8 +1934,7 @@ export default function App() {
           <CalendarTab events={events} setEvents={setEvents} schedule={schedule} courseOptions={courseOptions}
             gToken={gToken} connectGoogle={connectGoogle} disconnectGoogle={disconnectGoogle}
             pushToGCal={pushToGCal} saveEvent={saveEvent}
-            showToast={showToast} showEventForm={showEventForm} setShowEventForm={setShowEventForm}
-            shareStatus={shareStatus} shareCalendar={() => shareCalendar({ quiet: false })} />
+            showToast={showToast} showEventForm={showEventForm} setShowEventForm={setShowEventForm} />
         )}
       </div>
 
