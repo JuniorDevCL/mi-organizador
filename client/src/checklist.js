@@ -24,12 +24,14 @@ export const greetingForHour = (hour) => {
   return 'Buenas noches'
 }
 
-export const formatLongDate = (date = new Date()) =>
-  date.toLocaleDateString('es-CL', {
+export const formatLongDate = (date = new Date()) => {
+  const label = date.toLocaleDateString('es-CL', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
   })
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
 
 /**
  * Build today's task instances from recurring templates.

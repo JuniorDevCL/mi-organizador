@@ -7,6 +7,7 @@ import {
 } from './offeringParser'
 import { CURRICULUM, matchSemesterCourses } from './curriculum'
 import PluxeeTab from './PluxeeTab'
+import { LS, store } from './store'
 import {
   dateKey,
   greetingForHour,
@@ -27,10 +28,6 @@ const isGoogleConfigured = () => GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== PLACEH
 const SCOPES = 'https://www.googleapis.com/auth/calendar.events'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const LS = {
-  get: (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def } catch { return def } },
-  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} },
-}
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2)
 
 const TYPE_CFG = {
@@ -181,6 +178,8 @@ const Icon = ({ name, size = 20 }) => {
     upload:   <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
     settings: <><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></>,
     map:     <><path d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></>,
+    user:    <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
+    cloud:   <><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></>,
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -445,7 +444,7 @@ function JourneyTab({
       }}>
         <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-light)', marginBottom: 2 }}>{greeting}</p>
         <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.4 }}>Mi recorrido</h2>
-        <p style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)', textTransform: 'capitalize' }}>{dateLabel}</p>
+        <p style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{dateLabel}</p>
 
         <div style={{ marginTop: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -476,7 +475,7 @@ function JourneyTab({
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="card-list">
         {tasks.map(task => (
           <ChecklistTaskRow
             key={task.id}
@@ -1660,7 +1659,7 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
       {upcoming.length > 0 && (
         <>
           <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 1 }}>Próximos ({upcoming.length})</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+          <div className="card-list" style={{ marginBottom: 24 }}>
             {upcoming.map(ev => (
               <EventCard key={ev.id} ev={ev} now={now} gToken={gToken}
                 onSync={() => pushToGCal(ev)}
@@ -1673,7 +1672,7 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
       {past.length > 0 && (
         <>
           <p style={{ margin: '0 0 10px', fontSize: 11, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: 1 }}>Pasados ({past.length})</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="card-list">
             {past.map(ev => (
               <EventCard key={ev.id} ev={ev} gToken={gToken} past
                 onDelete={() => { setEvents(p => p.filter(e => e.id !== ev.id)); showToast('Evento eliminado') }} />
@@ -1686,8 +1685,24 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
 }
 
 // ─── Root App ─────────────────────────────────────────────────────────────────
-export default function App() {
+const NAV_ITEMS = [
+  { id: 'goals', label: 'Mi recorrido', icon: 'check' },
+  { id: 'schedule', label: 'Horario', icon: 'book' },
+  { id: 'calendar', label: 'Agenda', icon: 'calendar' },
+  { id: 'pluxee', label: 'Pluxee', icon: 'map' },
+  { id: 'settings', label: 'Config', icon: 'settings' },
+]
+
+const SYNC_LABEL = {
+  saving: 'Guardando…',
+  saved: 'Guardado en la nube',
+  error: 'Sin conexión — se reintentará',
+}
+
+export default function App({ user, onLogout }) {
   const [tab, setTab] = useState('goals')
+  const [syncStatus, setSyncStatus] = useState('saved')
+  useEffect(() => store.subscribe(s => { if (SYNC_LABEL[s]) setSyncStatus(s) }), [])
   const [checklistTemplates, setChecklistTemplates] = useState(() => LS.get('app_checklist_templates_v1', []))
   const [checklistDays, setChecklistDays] = useState(() => LS.get('app_checklist_days_v1', {}))
   const [events, setEvents] = useState(() => LS.get('app_events_v3', []))
@@ -1868,88 +1883,120 @@ export default function App() {
   }
 
   const courseOptions = getCourseOptions(offering, myCourses, schedule)
+  const current = NAV_ITEMS.find(n => n.id === tab) || NAV_ITEMS[0]
+  const showFab = tab !== 'settings' && tab !== 'pluxee'
+  const firstName = (user?.name || '').split(' ')[0]
+  const initials = (user?.name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
+
+  const content = tab === 'goals' ? (
+    <JourneyTab
+      templates={checklistTemplates} setTemplates={setChecklistTemplates}
+      daysMap={checklistDays} setDaysMap={setChecklistDays}
+      showTaskForm={showTaskForm} setShowTaskForm={setShowTaskForm}
+      showToast={showToast}
+    />
+  ) : tab === 'schedule' ? (
+    <ScheduleTab schedule={schedule} setSchedule={setSchedule}
+      showScheduleForm={showScheduleForm} setShowScheduleForm={setShowScheduleForm}
+      showToast={showToast} onOpenSettings={() => setTab('settings')} />
+  ) : tab === 'settings' ? (
+    <ConfigTab schedule={schedule} setSchedule={setSchedule}
+      offering={offering} setOffering={setOffering}
+      myCourses={myCourses} setMyCourses={setMyCourses}
+      sectionSelections={sectionSelections} setSectionSelections={setSectionSelections}
+      darkMode={darkMode} setDarkMode={setDarkMode}
+      showToast={showToast} onScheduleGenerated={() => setTab('schedule')} />
+  ) : tab === 'pluxee' ? (
+    <PluxeeTab />
+  ) : (
+    <CalendarTab events={events} setEvents={setEvents} schedule={schedule} courseOptions={courseOptions}
+      gToken={gToken} connectGoogle={connectGoogle} disconnectGoogle={disconnectGoogle}
+      pushToGCal={pushToGCal} saveEvent={saveEvent}
+      showToast={showToast} showEventForm={showEventForm} setShowEventForm={setShowEventForm} />
+  )
 
   return (
-    <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", maxWidth: 480, margin: '0 auto', minHeight: '100vh', background: 'var(--bg-page)', color: 'var(--text)' }}>
-
+    <div className="app-shell">
       {toast && (
-        <div style={{
-          position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 999,
-          background: toast.type === 'err' ? 'var(--err-bg)' : toast.type === 'warn' ? 'var(--warn-bg)' : 'var(--success-bg)',
-          color: toast.type === 'err' ? 'var(--err-text)' : toast.type === 'warn' ? 'var(--warn-text)' : 'var(--success-text)',
-          padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600,
-          border: `1px solid ${toast.type === 'err' ? 'var(--err-border)' : toast.type === 'warn' ? 'var(--warn-border)' : 'var(--success-border)'}`,
-          boxShadow: '0 4px 24px var(--shadow-strong)', whiteSpace: 'nowrap', pointerEvents: 'none',
-        }}>{toast.msg}</div>
+        <div className={`toast toast-${toast.type}`} role="status">{toast.msg}</div>
       )}
 
-      <div style={{ padding: '22px 18px 0', background: 'var(--bg-page)' }}>
-        <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-faint)', letterSpacing: 1.5, textTransform: 'uppercase' }}>Mi Centro</p>
-        <h1 style={{ margin: '2px 0 16px', fontSize: 26, fontWeight: 800, color: 'var(--text)', letterSpacing: -0.8 }}>Organización</h1>
-        <div style={{ display: 'flex', gap: 3, background: 'var(--bg-tab-bar)', borderRadius: 13, padding: 4 }}>
-          {[
-            { id: 'goals', label: 'Mi recorrido', icon: 'check' },
-            { id: 'schedule', label: 'Horario', icon: 'book' },
-            { id: 'calendar', label: 'Agenda', icon: 'calendar' },
-            { id: 'pluxee', label: 'Pluxee', icon: 'map' },
-            { id: 'settings', label: 'Config', icon: 'settings' },
-          ].map(t => (
-            <button key={t.id} onClick={() => onTabChange(t.id)} style={{
-              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
-              padding: '8px 2px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600,
-              background: tab === t.id ? 'var(--bg-tab-active)' : 'transparent',
-              color: tab === t.id ? 'var(--accent)' : 'var(--text-tab-inactive)',
-              boxShadow: tab === t.id ? '0 1px 6px var(--shadow)' : 'none',
-              transition: 'all 0.18s',
-            }}>
-              <Icon name={t.icon} size={13} />
-              <span style={{ lineHeight: 1 }}>{t.label}</span>
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <span className="brand-mark" aria-hidden><Icon name="check" size={18} /></span>
+          <div>
+            <p className="brand-kicker">Mi Centro</p>
+            <p className="brand-title">Organización</p>
+          </div>
+        </div>
+
+        <nav className="sidebar-nav" aria-label="Secciones">
+          {NAV_ITEMS.map(t => (
+            <button key={t.id} type="button" onClick={() => onTabChange(t.id)}
+              className={`nav-item ${tab === t.id ? 'active' : ''}`} aria-current={tab === t.id ? 'page' : undefined}>
+              <Icon name={t.icon} size={18} />
+              <span>{t.label}</span>
             </button>
           ))}
+        </nav>
+
+        <div className="sidebar-footer">
+          <div className="user-chip">
+            <span className="avatar" aria-hidden>{initials}</span>
+            <div className="user-meta">
+              <p className="user-name">{user?.name}</p>
+              <p className="user-email">{user?.email}</p>
+            </div>
+          </div>
+          <p className={`sync-pill sync-${syncStatus}`}>
+            <Icon name="cloud" size={12} /> {SYNC_LABEL[syncStatus]}
+          </p>
+          <button type="button" className="btn-ghost" onClick={onLogout}>
+            <Icon name="logout" size={15} /> Cerrar sesión
+          </button>
         </div>
+      </aside>
+
+      <div className="main-column">
+        <header className="topbar">
+          <div className="topbar-mobile-brand">
+            <p className="brand-kicker">Mi Centro</p>
+            <h1 className="brand-title">Organización</h1>
+          </div>
+          <div className="topbar-desktop-title">
+            <h1>{current.label}</h1>
+            <p>Hola, {firstName} · <span className={`sync-inline sync-${syncStatus}`}>{SYNC_LABEL[syncStatus]}</span></p>
+          </div>
+          <div className="topbar-actions">
+            <button type="button" className="icon-btn" onClick={() => setDarkMode(!darkMode)}
+              title={darkMode ? 'Modo claro' : 'Modo noche'} aria-label={darkMode ? 'Modo claro' : 'Modo noche'}>
+              {darkMode ? '☀️' : '🌙'}
+            </button>
+            <button type="button" className="icon-btn mobile-only" onClick={onLogout} title="Cerrar sesión" aria-label="Cerrar sesión">
+              <Icon name="logout" size={16} />
+            </button>
+          </div>
+        </header>
+
+        <main className={`content content-${tab}`}>
+          {content}
+        </main>
       </div>
 
-      <div style={{ padding: '16px 18px 100px' }}>
-        {tab === 'goals' ? (
-          <JourneyTab
-            templates={checklistTemplates} setTemplates={setChecklistTemplates}
-            daysMap={checklistDays} setDaysMap={setChecklistDays}
-            showTaskForm={showTaskForm} setShowTaskForm={setShowTaskForm}
-            showToast={showToast}
-          />
-        ) : tab === 'schedule' ? (
-          <ScheduleTab schedule={schedule} setSchedule={setSchedule}
-            showScheduleForm={showScheduleForm} setShowScheduleForm={setShowScheduleForm}
-            showToast={showToast} onOpenSettings={() => setTab('settings')} />
-        ) : tab === 'settings' ? (
-          <ConfigTab schedule={schedule} setSchedule={setSchedule}
-            offering={offering} setOffering={setOffering}
-            myCourses={myCourses} setMyCourses={setMyCourses}
-            sectionSelections={sectionSelections} setSectionSelections={setSectionSelections}
-            darkMode={darkMode} setDarkMode={setDarkMode}
-            showToast={showToast} onScheduleGenerated={() => setTab('schedule')} />
-        ) : tab === 'pluxee' ? (
-          <PluxeeTab />
-        ) : (
-          <CalendarTab events={events} setEvents={setEvents} schedule={schedule} courseOptions={courseOptions}
-            gToken={gToken} connectGoogle={connectGoogle} disconnectGoogle={disconnectGoogle}
-            pushToGCal={pushToGCal} saveEvent={saveEvent}
-            showToast={showToast} showEventForm={showEventForm} setShowEventForm={setShowEventForm} />
-        )}
-      </div>
+      <nav className="bottom-nav" aria-label="Secciones">
+        {NAV_ITEMS.map(t => (
+          <button key={t.id} type="button" onClick={() => onTabChange(t.id)}
+            className={`bottom-nav-item ${tab === t.id ? 'active' : ''}`} aria-current={tab === t.id ? 'page' : undefined}>
+            <Icon name={t.icon} size={18} />
+            <span>{t.label}</span>
+          </button>
+        ))}
+      </nav>
 
-      {tab !== 'settings' && tab !== 'pluxee' && (
-      <button
-        onClick={openFab}
-        style={{
-          position: 'fixed', bottom: 24, right: 20,
-          width: 54, height: 54, borderRadius: '50%', border: 'none',
-          background: 'linear-gradient(135deg, var(--accent-gradient-start), var(--accent))',
-          color: 'var(--text-on-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', boxShadow: '0 4px 20px var(--shadow-strong)',
-        }}>
-        <Icon name="plus" size={22} />
-      </button>
+      {showFab && (
+        <button type="button" onClick={openFab} className="fab" aria-label="Agregar">
+          <Icon name="plus" size={22} />
+        </button>
       )}
     </div>
   )

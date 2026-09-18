@@ -1,0 +1,31 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Un solo Web Service sirve la API (Express) y el frontend compilado (Vite).
+services:
+  - type: web
+    name: mi-organizador
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mi-organizador-db
+          property: connectionString
+      # Opcional: sincronización con Google Calendar
+      # - key: VITE_GOOGLE_CLIENT_ID
+      #   sync: false
+
+databases:
+  - name: mi-organizador-db
+    plan: free
+    databaseName: mi_organizador
+    user: mi_organizador

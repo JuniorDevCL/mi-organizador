@@ -1,24 +1,22 @@
 {
   "name": "mi-organizador",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "node --test src/*.test.js",
-    "fetch:pluxee": "node scripts/fetch-pluxee-santiago.mjs"
+  "engines": {
+    "node": ">=22.13.0"
   },
-  "dependencies": {
-    "leaflet": "^1.9.4",
-    "leaflet.markercluster": "^1.5.3",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-leaflet": "^4.2.1"
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client",
+    "start": "npm start -w server",
+    "test": "npm test -w client && npm test -w server"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.2.0",
-    "vite": "^5.0.0"
+    "concurrently": "^9.1.2"
   }
 }
