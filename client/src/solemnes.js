@@ -227,6 +227,7 @@ export const matchSolemnes = (courses, { school = '', query = '' } = {}) => {
       if (!q) return true
       return normalizeName(exam.examName).includes(q) || normalizeName(exam.courseName).includes(q)
     })
+    if (q && exams.length === 0) return acc
     day.slots.push({
       start: slot.start,
       end: slot.end,
@@ -238,7 +239,11 @@ export const matchSolemnes = (courses, { school = '', query = '' } = {}) => {
   }, new Map())
 
   mine.sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start) || a.examName.localeCompare(b.examName, 'es'))
-  return { days: [...days.values()].sort((a, b) => a.day - b.day), mine }
+  const daysList = [...days.values()]
+    .map((day) => (q ? { ...day, slots: day.slots.filter((slot) => slot.exams.length) } : day))
+    .filter((day) => !q || day.slots.length)
+    .sort((a, b) => a.day - b.day)
+  return { days: daysList, mine }
 }
 
 export const toCalendarEvent = (exam) => ({

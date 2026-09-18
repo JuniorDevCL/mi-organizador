@@ -952,7 +952,7 @@ input, textarea, select {
   color: var(--err-text);
 }
 .sol-add-all { width: 100%; height: auto; padding: 10px 14px; }
-.sol-list { display: flex; flex-direction: column; }
+.sol-list { display: flex; flex-direction: column; padding-bottom: 8px; }
 .sol-exam {
   display: flex;
   justify-content: space-between;

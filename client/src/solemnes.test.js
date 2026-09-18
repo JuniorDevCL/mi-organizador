@@ -70,6 +70,14 @@ test('arma el evento de agenda con id estable y no duplica', () => {
   assert.equal(isInAgenda([], exam), false)
 })
 
+test('la búsqueda no trae días vacíos del calendario', () => {
+  const { days, mine } = matchSolemnes(collectCourses([{ name: 'Programación' }]), { query: 'programacion' })
+  assert.equal(mine.length, 1)
+  assert.equal(days.length, 1)
+  assert.equal(days[0].date, '2026-09-25')
+  assert.ok(days[0].slots.every((slot) => slot.exams.length > 0))
+})
+
 test('junta ramos del horario y de la oferta', () => {
   const courses = collectCourses(
     [{ name: 'Redes de Datos', code: 'CIT2111' }],
