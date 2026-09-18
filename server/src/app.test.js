@@ -2,7 +2,6 @@ import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { createDb } from './db.js'
 import { createApp } from './app.js'
-import { OAUTH_STATE_COOKIE } from './googleAuth.js'
 
 let server, base, db
 let googleProfile = {
@@ -54,9 +53,10 @@ const signInGoogle = async (profile) => {
   googleProfile = profile
   const start = await call('/api/auth/google', { redirect: 'manual' })
   assert.equal(start.status, 302)
-  const state = cookieJar.get(OAUTH_STATE_COOKIE)
+  const location = new URL(start.location, base)
+  const state = location.searchParams.get('state')
   assert.ok(state)
-  const cb = await call(`/api/auth/google/callback?code=test-code&state=${state}`, { redirect: 'manual' })
+  const cb = await call(`/api/auth/google/callback?code=test-code&state=${encodeURIComponent(state)}`, { redirect: 'manual' })
   return cb
 }
 
@@ -125,13 +125,38 @@ describe('API', () => {
   })
 
   it('redirects to Google with the UDP hosted domain', async () => {
+    cookieJar.clear()
     const r = await call('/api/auth/google', { redirect: 'manual', cookie: false })
     assert.equal(r.status, 302)
     const location = new URL(r.location)
     assert.equal(location.hostname, 'accounts.google.com')
     assert.equal(location.searchParams.get('hd'), 'udp.cl')
     assert.equal(location.searchParams.get('prompt'), 'select_account')
-    assert.ok(cookieJar.has(OAUTH_STATE_COOKIE))
+    assert.ok(location.searchParams.get('state'))
+    assert.ok(location.searchParams.get('code_challenge'))
+    assert.equal(cookieJar.has('mo_oauth_state'), false)
+    assert.equal(cookieJar.has('mo_oauth_pkce'), false)
+  })
+
+  it('finishes Google login without OAuth cookies', async () => {
+    cookieJar.clear()
+    const start = await call('/api/auth/google', { redirect: 'manual', cookie: false })
+    const state = new URL(start.location, base).searchParams.get('state')
+    cookieJar.clear()
+    googleProfile = {
+      email: 'ana@mail.udp.cl',
+      email_verified: true,
+      name: 'Ana',
+      sub: 'google-ana',
+    }
+    const cb = await call(
+      `/api/auth/google/callback?code=test-code&state=${encodeURIComponent(state)}`,
+      { redirect: 'manual', cookie: false },
+    )
+    assert.equal(cb.status, 302)
+    assert.equal(cb.location, '/')
+    assert.ok(cookieJar.has('mo_session'))
+    assert.equal(cookieJar.has('mo_oauth_pkce'), false)
   })
 
   it('creates a UDP session from Google and persists data', async () => {
@@ -264,5 +289,53 @@ describe('API', () => {
       assert.ok(user.createdAt)
       assert.ok(user.id)
     }
+  })
+})
+
+describe('Google OAuth errors', () => {
+  let errorServer
+  let errorBase
+  let errorDb
+
+  const errorCall = async (path, { redirect = 'manual' } = {}) => {
+    const res = await fetch(errorBase + path, { redirect })
+    return { status: res.status, location: res.headers.get('location') }
+  }
+
+  before(async () => {
+    errorDb = await createDb({ databaseUrl: '', sqliteFile: ':memory:' })
+    const app = createApp({
+      db: errorDb,
+      jwtSecret: 'test-secret',
+      serveClient: false,
+      google: {
+        clientId: 'test.apps.googleusercontent.com',
+        clientSecret: '  "bad-secret"  ',
+      },
+      fetchImpl: async (url) => {
+        if (String(url).includes('oauth2.googleapis.com/token')) {
+          return new Response(JSON.stringify({ error: 'invalid_client' }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        return new Response('{}', { status: 500 })
+      },
+    })
+    await new Promise((resolve) => { errorServer = app.listen(0, resolve) })
+    errorBase = `http://127.0.0.1:${errorServer.address().port}`
+  })
+
+  after(async () => {
+    errorServer.close()
+    await errorDb.close()
+  })
+
+  it('maps an invalid Google secret to a clear login error', async () => {
+    const start = await errorCall('/api/auth/google')
+    const state = new URL(start.location, errorBase).searchParams.get('state')
+    const cb = await errorCall(`/api/auth/google/callback?code=test-code&state=${encodeURIComponent(state)}`)
+    assert.equal(cb.status, 302)
+    assert.equal(cb.location, '/?error=secret')
   })
 })

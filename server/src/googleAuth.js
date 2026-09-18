@@ -1,16 +1,33 @@
 import { createHash, randomBytes } from 'node:crypto'
+import jwt from 'jsonwebtoken'
 
-export const OAUTH_STATE_COOKIE = 'mo_oauth_state'
-export const OAUTH_PKCE_COOKIE = 'mo_oauth_pkce'
 export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 export const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo'
 
 export function createPkce() {
-  const state = randomBytes(16).toString('base64url')
   const verifier = randomBytes(32).toString('base64url')
   const challenge = createHash('sha256').update(verifier).digest('base64url')
-  return { state, verifier, challenge }
+  return { verifier, challenge }
+}
+
+export function signOAuthState(secret, { verifier, redirectUri }) {
+  return jwt.sign(
+    { v: verifier, r: redirectUri },
+    secret,
+    { expiresIn: '10m', algorithm: 'HS256' },
+  )
+}
+
+export function readOAuthState(secret, state) {
+  const payload = jwt.verify(String(state || ''), secret, { algorithms: ['HS256'] })
+  const verifier = payload?.v
+  if (!verifier) throw new Error('state inválido')
+  return { verifier, redirectUri: payload?.r || '' }
+}
+
+export function sanitizeGoogleValue(value) {
+  return String(value || '').trim().replace(/^['"]+|['"]+$/g, '')
 }
 
 export function requestOrigin(req) {
@@ -71,8 +88,9 @@ export async function exchangeGoogleCode({
   })
   const json = await readJson(res)
   if (!res.ok || !json.access_token) {
-    const err = new Error(json.error_description || 'No se pudo validar Google')
+    const err = new Error(json.error_description || json.error || 'No se pudo validar Google')
     err.status = 401
+    err.code = json.error
     throw err
   }
   return json

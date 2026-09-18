@@ -4,6 +4,8 @@ const ERRORS = {
   udp: 'Solo se puede entrar con un correo institucional UDP (@mail.udp.cl). Elige esa cuenta en Google.',
   google: 'No se pudo entrar con Google. Inténtalo de nuevo.',
   config: 'Falta configurar Google en el servidor (GOOGLE_CLIENT_SECRET y la URI de redirección).',
+  secret: 'Google rechazó el secreto. En Vercel, GOOGLE_CLIENT_SECRET debe ser el de ese Client ID, sin comillas ni espacios.',
+  denied: 'Cancelaste el acceso en Google.',
 }
 
 export default function AuthScreen() {

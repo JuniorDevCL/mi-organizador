@@ -8,9 +8,9 @@ import {
   parseAdminEmails, isAdminEmail, parseAllowedEmailDomains, isCampusEmail,
 } from './auth.js'
 import {
-  OAUTH_PKCE_COOKIE, OAUTH_STATE_COOKIE,
   buildGoogleAuthUrl, createPkce, exchangeGoogleCode, fetchGoogleUser,
-  googleEmailVerified, requestOrigin,
+  googleEmailVerified, readOAuthState, requestOrigin, sanitizeGoogleValue,
+  signOAuthState,
 } from './googleAuth.js'
 import { catalogPayload } from './udpCareers.js'
 import { loadCareerOffering } from './oferta.js'
@@ -47,14 +47,14 @@ export function createApp({
   const auth = createAuthService(db, jwtSecret, { allowedEmailDomains })
   const admin = (user) => isAdminEmail(user?.email, adminEmails)
   const withRole = (user) => ({ user, admin: admin(user) })
-  const googleReady = Boolean(google?.clientId && google?.clientSecret)
-  const oauthCookie = () => ({ ...cookieOptions(), maxAge: 10 * 60 * 1000 })
+  const googleClientId = sanitizeGoogleValue(google?.clientId)
+  const googleClientSecret = sanitizeGoogleValue(google?.clientSecret)
+  const googleReady = Boolean(googleClientId && googleClientSecret)
   const passwordDisabled = { error: 'Usa tu correo UDP con Google para entrar' }
 
   const failGoogle = (res, code) => {
+    res.setHeader('Cache-Control', 'no-store')
     res.clearCookie(COOKIE_NAME, { path: '/' })
-    res.clearCookie(OAUTH_STATE_COOKIE, { path: '/' })
-    res.clearCookie(OAUTH_PKCE_COOKIE, { path: '/' })
     res.redirect(`/?error=${code}`)
   }
 
@@ -102,13 +102,13 @@ export function createApp({
   app.post('/api/auth/login', (_req, res) => res.status(410).json(passwordDisabled))
 
   app.get('/api/auth/google', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store')
     if (!googleReady) return res.redirect('/?error=config')
-    const { state, verifier, challenge } = createPkce()
+    const { verifier, challenge } = createPkce()
     const redirectUri = `${requestOrigin(req)}/api/auth/google/callback`
-    res.cookie(OAUTH_STATE_COOKIE, state, oauthCookie())
-    res.cookie(OAUTH_PKCE_COOKIE, verifier, oauthCookie())
+    const state = signOAuthState(jwtSecret, { verifier, redirectUri })
     res.redirect(buildGoogleAuthUrl({
-      clientId: google.clientId,
+      clientId: googleClientId,
       redirectUri,
       state,
       challenge,
@@ -117,21 +117,28 @@ export function createApp({
 
   app.get('/api/auth/google/callback', async (req, res) => {
     try {
+      res.setHeader('Cache-Control', 'no-store')
       if (!googleReady) return failGoogle(res, 'config')
+      if (req.query.error === 'access_denied') return failGoogle(res, 'denied')
       if (req.query.error) return failGoogle(res, 'google')
       const code = String(req.query.code || '')
       const state = String(req.query.state || '')
-      const expectedState = String(req.cookies?.[OAUTH_STATE_COOKIE] || '')
-      const verifier = String(req.cookies?.[OAUTH_PKCE_COOKIE] || '')
-      if (!code || !state || !expectedState || state !== expectedState || !verifier) {
+      if (!code || !state) return failGoogle(res, 'google')
+
+      let verifier
+      let redirectUri
+      try {
+        const parsed = readOAuthState(jwtSecret, state)
+        verifier = parsed.verifier
+        redirectUri = parsed.redirectUri || `${requestOrigin(req)}/api/auth/google/callback`
+      } catch {
         return failGoogle(res, 'google')
       }
 
-      const redirectUri = `${requestOrigin(req)}/api/auth/google/callback`
       const tokens = await exchangeGoogleCode({
         fetchImpl,
-        clientId: google.clientId,
-        clientSecret: google.clientSecret,
+        clientId: googleClientId,
+        clientSecret: googleClientSecret,
         code,
         redirectUri,
         verifier,
@@ -143,12 +150,14 @@ export function createApp({
         email: profile.email,
         name: profile.name || [profile.given_name, profile.family_name].filter(Boolean).join(' '),
       })
-      res.clearCookie(OAUTH_STATE_COOKIE, { path: '/' })
-      res.clearCookie(OAUTH_PKCE_COOKIE, { path: '/' })
       setSession(res, token)
       res.redirect('/')
     } catch (err) {
-      failGoogle(res, err.status === 403 ? 'udp' : 'google')
+      console.error('Google OAuth:', err.code || err.message)
+      if (err.status === 403) return failGoogle(res, 'udp')
+      if (err.code === 'invalid_client') return failGoogle(res, 'secret')
+      if (err.code === 'redirect_uri_mismatch') return failGoogle(res, 'config')
+      failGoogle(res, 'google')
     }
   })
 

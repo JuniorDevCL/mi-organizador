@@ -2,15 +2,16 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   buildGoogleAuthUrl, createPkce, requestOrigin, googleEmailVerified,
+  signOAuthState, readOAuthState, sanitizeGoogleValue,
 } from './googleAuth.js'
 
 test('arma la URL de Google con PKCE y dominio UDP', () => {
-  const { state, verifier, challenge } = createPkce()
-  assert.equal(typeof verifier, 'string')
-  assert.notEqual(state, challenge)
+  const { verifier, challenge } = createPkce()
+  const redirectUri = 'https://app.vercel.app/api/auth/google/callback'
+  const state = signOAuthState('test-secret', { verifier, redirectUri })
   const url = new URL(buildGoogleAuthUrl({
     clientId: 'abc.apps.googleusercontent.com',
-    redirectUri: 'https://app.vercel.app/api/auth/google/callback',
+    redirectUri,
     state,
     challenge,
   }))
@@ -19,7 +20,10 @@ test('arma la URL de Google con PKCE y dominio UDP', () => {
   assert.equal(url.searchParams.get('prompt'), 'select_account')
   assert.equal(url.searchParams.get('code_challenge_method'), 'S256')
   assert.equal(url.searchParams.get('state'), state)
-  assert.equal(url.searchParams.get('redirect_uri'), 'https://app.vercel.app/api/auth/google/callback')
+  assert.equal(url.searchParams.get('redirect_uri'), redirectUri)
+  const parsed = readOAuthState('test-secret', state)
+  assert.equal(parsed.verifier, verifier)
+  assert.equal(parsed.redirectUri, redirectUri)
 })
 
 test('toma el origen público del request o de PUBLIC_URL', () => {
@@ -38,4 +42,9 @@ test('exige que Google haya verificado el correo', () => {
   assert.equal(googleEmailVerified({ email_verified: true }), true)
   assert.equal(googleEmailVerified({ email_verified: 'true' }), true)
   assert.equal(googleEmailVerified({ email_verified: false }), false)
+})
+
+test('limpia comillas y espacios del secreto de Google', () => {
+  assert.equal(sanitizeGoogleValue('  "abc"  '), 'abc')
+  assert.equal(sanitizeGoogleValue("'xyz'"), 'xyz')
 })
