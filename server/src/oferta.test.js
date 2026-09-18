@@ -58,3 +58,16 @@ test('rechaza una carrera que no está en el catálogo', async () => {
     (err) => err.status === 404,
   )
 })
+
+test('lee ofertas UDP en SpreadsheetML (xml con extensión .xls)', () => {
+  const xml = `<?xml version="1.0"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<TEST_REPORT><Author>UDP</Author></TEST_REPORT>
+<Worksheet ss:Name="Sheet1"><Table>
+<Row><Cell><Data ss:Type="String">Asignatura</Data></Cell><Cell><Data ss:Type="String">Nombre Asig.</Data></Cell><Cell><Data ss:Type="String">Sección</Data></Cell><Cell><Data ss:Type="String">Descrip. Evento</Data></Cell><Cell><Data ss:Type="String">Horario</Data></Cell></Row>
+<Row><Cell><Data ss:Type="String">PSI1000</Data></Cell><Cell><Data ss:Type="String">PSICOLOGÍA GENERAL</Data></Cell><Cell><Data ss:Type="String">Sección 1</Data></Cell><Cell><Data ss:Type="String">CÁTEDRA 01</Data></Cell><Cell><Data ss:Type="String">LU JU 10:00 - 11:20</Data></Cell></Row>
+</Table></Worksheet></Workbook>`
+  const csv = xlsBufferToCsv(Buffer.from(xml, 'utf8'))
+  const offering = csvToOffering(csv, UDP_CAREER_BY_ID.psicologia)
+  assert.equal(offering.courses.PSI1000.sections['Sección 1'].events.length, 1)
+})

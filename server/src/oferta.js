@@ -6,8 +6,15 @@ import { httpError } from './auth.js'
 const CACHE_MS = 6 * 60 * 60 * 1000
 const cache = new Map()
 
+const looksLikeXml = (buf) => {
+  const start = buf.subarray(0, 80).toString('utf8').replace(/^\uFEFF/, '').trim()
+  return start.startsWith('<?xml') || start.startsWith('<Workbook')
+}
+
 export const xlsBufferToCsv = (buf) => {
-  const workbook = XLSX.read(buf, { type: 'buffer', raw: false })
+  const workbook = looksLikeXml(buf)
+    ? XLSX.read(buf.toString('utf8').replace(/<TEST_REPORT>[\s\S]*?<\/TEST_REPORT>/gi, ''), { type: 'string', raw: false })
+    : XLSX.read(buf, { type: 'buffer', raw: false })
   const sheet = workbook.Sheets[workbook.SheetNames[0]]
   if (!sheet) throw httpError(502, 'El archivo de la UDP no tiene hojas')
   return XLSX.utils.sheet_to_csv(sheet)
