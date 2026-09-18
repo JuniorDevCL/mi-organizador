@@ -65,6 +65,7 @@ Variables de entorno (Production y Preview):
 | `JWT_SECRET` | una clave larga aleatoria |
 | `DATABASE_URL` | conexión de Postgres (en Vercel: **Storage → Create Database → Neon**) |
 | `VITE_GOOGLE_CLIENT_ID` | opcional, para Google Calendar |
+| `ADMIN_EMAILS` | tu correo de login, para ver quién se unió (Config) |
 
 En Google Cloud, autoriza el origen `https://<tu-proyecto>.vercel.app`.
 
@@ -79,7 +80,8 @@ El repo también incluye `render.yaml` (Web Service + Postgres). **Start Command
 | POST | `/api/auth/register` | `{ email, name, password }` → crea cuenta e inicia sesión |
 | POST | `/api/auth/login` | `{ email, password }` |
 | POST | `/api/auth/logout` | Cierra la sesión |
-| GET | `/api/auth/me` | Usuario actual |
+| GET | `/api/auth/me` | Usuario actual (`{ user, admin }`) |
+| GET | `/api/admin/users` | Lista de cuentas (solo correos en `ADMIN_EMAILS`) |
 | GET | `/api/data` | Todos los datos del usuario (`{ data: { clave: valor } }`) |
 | POST | `/api/data` | Guarda varias claves: `{ data: { clave: valor } }` |
 | PUT | `/api/data/:key` | Guarda una clave: `{ value }` |
@@ -96,4 +98,5 @@ Las sesiones usan una cookie `httpOnly` firmada con `JWT_SECRET` (30 días). Las
 | `PORT` | server | Puerto HTTP (Render lo define) |
 | `JWT_SECRET` | server | Clave para firmar sesiones (obligatoria en Vercel) |
 | `DATABASE_URL` | server | Postgres; si falta en local se usa SQLite |
+| `ADMIN_EMAILS` | server | Correos que pueden ver la lista de cuentas (separados por coma) |
 | `VITE_GOOGLE_CLIENT_ID` | client (build) | OAuth de Google Calendar (opcional) |

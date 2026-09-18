@@ -17,6 +17,17 @@ export const publicUser = (row) => ({
   createdAt: row.created_at,
 })
 
+export function parseAdminEmails(raw = process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || '') {
+  return String(raw)
+    .split(/[,;\s]+/)
+    .map(normalizeEmail)
+    .filter(isValidEmail)
+}
+
+export function isAdminEmail(email, adminEmails = parseAdminEmails()) {
+  return adminEmails.includes(normalizeEmail(email))
+}
+
 export function cookieOptions() {
   return {
     httpOnly: true,
@@ -77,6 +88,13 @@ export function createAuthService(db, secret) {
     async userById(id) {
       const row = await db.get('SELECT * FROM users WHERE id = $1', [id])
       return row ? publicUser(row) : null
+    },
+
+    async listUsers() {
+      const rows = await db.all(
+        'SELECT id, email, name, created_at FROM users ORDER BY created_at DESC',
+      )
+      return rows.map(publicUser)
     },
   }
 }

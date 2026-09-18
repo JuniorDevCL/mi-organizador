@@ -18,10 +18,10 @@ export default function AuthScreen({ onAuthenticated }) {
     setBusy(true)
     setError('')
     try {
-      const { user } = isRegister
+      const payload = isRegister
         ? await api.register(email, name, password)
         : await api.login(email, password)
-      onAuthenticated(user)
+      onAuthenticated({ ...payload.user, admin: !!payload.admin })
     } catch (err) {
       setError(err.message || 'No se pudo iniciar sesión')
     } finally {

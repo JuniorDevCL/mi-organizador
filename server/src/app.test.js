@@ -25,7 +25,12 @@ const call = async (path, { method = 'GET', body, cookie = true } = {}) => {
 describe('API', () => {
   before(async () => {
     db = await createDb({ databaseUrl: '', sqliteFile: ':memory:' })
-    const app = createApp({ db, jwtSecret: 'test-secret', serveClient: false })
+    const app = createApp({
+      db,
+      jwtSecret: 'test-secret',
+      serveClient: false,
+      adminEmails: ['owner@example.com'],
+    })
     await new Promise(resolve => { server = app.listen(0, resolve) })
     base = `http://127.0.0.1:${server.address().port}`
   })
@@ -57,6 +62,7 @@ describe('API', () => {
     })
     assert.equal(reg.status, 201)
     assert.equal(reg.json.user.email, 'ana@example.com')
+    assert.equal(reg.json.admin, false)
     assert.ok(cookieJar.has('mo_session'))
 
     const me = await call('/api/auth/me')
@@ -115,5 +121,44 @@ describe('API', () => {
   it('unknown career offering is 404', async () => {
     const r = await call('/api/oferta/no-existe', { cookie: false })
     assert.equal(r.status, 404)
+  })
+
+  it('hides the member list from guests and regular accounts', async () => {
+    const anon = await call('/api/admin/users', { cookie: false })
+    assert.equal(anon.status, 401)
+
+    const asAna = await call('/api/auth/login', {
+      method: 'POST', body: { email: 'ana@example.com', password: 'secreto1' },
+    })
+    assert.equal(asAna.status, 200)
+    assert.equal(asAna.json.admin, false)
+
+    const forbidden = await call('/api/admin/users')
+    assert.equal(forbidden.status, 403)
+    assert.equal(forbidden.json.error, 'No tienes permiso para ver las cuentas')
+  })
+
+  it('lets an admin list registered people without password hashes', async () => {
+    const owner = await call('/api/auth/register', {
+      method: 'POST',
+      body: { email: 'Owner@Example.com', name: 'Alexis', password: 'secreto1' },
+    })
+    assert.equal(owner.status, 201)
+    assert.equal(owner.json.admin, true)
+
+    const list = await call('/api/admin/users')
+    assert.equal(list.status, 200)
+    assert.ok(list.json.total >= 2)
+    assert.equal(list.json.users.length, list.json.total)
+    assert.deepEqual(
+      list.json.users.map(u => u.email).sort(),
+      ['ana@example.com', 'owner@example.com'],
+    )
+    for (const user of list.json.users) {
+      assert.equal(user.password_hash, undefined)
+      assert.ok(user.name)
+      assert.ok(user.createdAt)
+      assert.ok(user.id)
+    }
   })
 })

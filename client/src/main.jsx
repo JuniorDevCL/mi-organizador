@@ -40,7 +40,7 @@ function Root() {
 
   useEffect(() => {
     api.me()
-      .then(({ user: u }) => enter(u))
+      .then(({ user: u, admin }) => enter({ ...u, admin: !!admin }))
       .catch(() => setPhase('anon'))
   }, [])
 

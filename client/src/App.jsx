@@ -7,6 +7,7 @@ import {
 } from './offeringParser'
 import { CURRICULUM, matchSemesterCourses, offeringHasInformaticaPlan } from './curriculum'
 import PluxeeTab from './PluxeeTab'
+import AdminUsers from './AdminUsers.jsx'
 import { LS, store } from './store'
 import { api } from './api'
 import {
@@ -1078,6 +1079,7 @@ function ConfigTab({
   myCourses, setMyCourses, sectionSelections, setSectionSelections,
   darkMode, setDarkMode,
   showToast, onScheduleGenerated,
+  isAdmin = false,
 }) {
   const fileRef = useRef(null)
   const searchRef = useRef(null)
@@ -1272,6 +1274,7 @@ function ConfigTab({
 
   return (
     <div>
+      {isAdmin && <AdminUsers />}
       <div style={{
         background: 'var(--bg-card)', borderRadius: 14, padding: 14, marginBottom: 16,
         border: '1px solid var(--border)', display: 'flex', alignItems: 'center',
@@ -1960,7 +1963,8 @@ export default function App({ user, onLogout }) {
       myCourses={myCourses} setMyCourses={setMyCourses}
       sectionSelections={sectionSelections} setSectionSelections={setSectionSelections}
       darkMode={darkMode} setDarkMode={setDarkMode}
-      showToast={showToast} onScheduleGenerated={() => setTab('schedule')} />
+      showToast={showToast} onScheduleGenerated={() => setTab('schedule')}
+      isAdmin={!!user?.admin} />
   ) : tab === 'pluxee' ? (
     <PluxeeTab />
   ) : (

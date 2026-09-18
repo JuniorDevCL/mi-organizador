@@ -5,6 +5,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   COOKIE_NAME, cookieOptions, createAuthService, verifySession, httpError,
+  parseAdminEmails, isAdminEmail,
 } from './auth.js'
 import { catalogPayload } from './udpCareers.js'
 import { loadCareerOffering } from './oferta.js'
@@ -28,9 +29,14 @@ export const ALLOWED_KEYS = new Set([
 
 const MAX_VALUE_BYTES = 2 * 1024 * 1024
 
-export function createApp({ db, jwtSecret, serveClient = true, fetchImpl = fetch } = {}) {
+export function createApp({
+  db, jwtSecret, serveClient = true, fetchImpl = fetch,
+  adminEmails = parseAdminEmails(),
+} = {}) {
   const app = express()
   const auth = createAuthService(db, jwtSecret)
+  const admin = (user) => isAdminEmail(user?.email, adminEmails)
+  const withRole = (user) => ({ user, admin: admin(user) })
 
   app.disable('x-powered-by')
   app.set('trust proxy', 1)
@@ -47,6 +53,11 @@ export function createApp({ db, jwtSecret, serveClient = true, fetchImpl = fetch
       return next(httpError(401, 'Sesión inválida'))
     }
     req.user = user
+    next()
+  }
+
+  const requireAdmin = (req, res, next) => {
+    if (!admin(req.user)) return next(httpError(403, 'No tienes permiso para ver las cuentas'))
     next()
   }
 
@@ -67,7 +78,7 @@ export function createApp({ db, jwtSecret, serveClient = true, fetchImpl = fetch
     try {
       const { user, token } = await auth.register(req.body || {})
       setSession(res, token)
-      res.status(201).json({ user })
+      res.status(201).json(withRole(user))
     } catch (err) { next(err) }
   })
 
@@ -75,7 +86,7 @@ export function createApp({ db, jwtSecret, serveClient = true, fetchImpl = fetch
     try {
       const { user, token } = await auth.login(req.body || {})
       setSession(res, token)
-      res.json({ user })
+      res.json(withRole(user))
     } catch (err) { next(err) }
   })
 
@@ -84,7 +95,14 @@ export function createApp({ db, jwtSecret, serveClient = true, fetchImpl = fetch
     res.status(204).end()
   })
 
-  app.get('/api/auth/me', requireAuth, (req, res) => res.json({ user: req.user }))
+  app.get('/api/auth/me', requireAuth, (req, res) => res.json(withRole(req.user)))
+
+  app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res, next) => {
+    try {
+      const users = await auth.listUsers()
+      res.json({ total: users.length, users })
+    } catch (err) { next(err) }
+  })
 
   // ── Datos por usuario ─────────────────────────────────────────────────────
   app.get('/api/data', requireAuth, async (req, res, next) => {
