@@ -14,6 +14,8 @@ import {
 } from './googleAuth.js'
 import { catalogPayload } from './udpCareers.js'
 import { loadCareerOffering } from './oferta.js'
+import { chileClock, createSalasService } from './salas.js'
+import { createFriendsService } from './friends.js'
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 const CLIENT_DIST = join(__dir, '..', '..', 'client', 'dist')
@@ -30,6 +32,7 @@ export const ALLOWED_KEYS = new Set([
   'app_semester_v1',
   'app_career_v1',
   'app_dark_mode',
+  'app_grades_v1',
 ])
 
 const MAX_VALUE_BYTES = 2 * 1024 * 1024
@@ -51,6 +54,12 @@ export function createApp({
   const googleClientSecret = sanitizeGoogleValue(google?.clientSecret)
   const googleReady = Boolean(googleClientId && googleClientSecret)
   const passwordDisabled = { error: 'Usa tu correo UDP con Google para entrar' }
+  const salas = createSalasService({ fetchImpl })
+  const friends = createFriendsService(db, { allowedEmailDomains })
+  const currentAcademicDay = () => {
+    const day = chileClock().day
+    return day === 0 || day === 6 ? 1 : day
+  }
 
   const failGoogle = (res, code) => {
     res.setHeader('Cache-Control', 'no-store')
@@ -173,6 +182,59 @@ export function createApp({
       const users = await auth.listUsers()
       res.json({ total: users.length, users })
     } catch (err) { next(err) }
+  })
+
+  app.get('/api/salas/ahora', requireAuth, async (req, res, next) => {
+    try {
+      res.json(await salas.now(String(req.query.q || '')))
+    } catch (err) { next(err) }
+  })
+
+  app.get('/api/salas/sala/:nombre', requireAuth, async (req, res, next) => {
+    try {
+      res.json(await salas.room(req.params.nombre))
+    } catch (err) { next(err) }
+  })
+
+  app.get('/api/salas', requireAuth, async (req, res, next) => {
+    try {
+      res.json(await salas.occupancy({
+        day: req.query.dia || currentAcademicDay(),
+        blockId: req.query.bloque || '08:30',
+        query: String(req.query.q || ''),
+      }))
+    } catch (err) { next(err) }
+  })
+
+  app.get('/api/friends', requireAuth, async (req, res, next) => {
+    try { res.json(await friends.list(req.user.id)) } catch (err) { next(err) }
+  })
+
+  app.post('/api/friends', requireAuth, async (req, res, next) => {
+    try { res.status(201).json(await friends.invite(req.user.id, req.body?.email)) } catch (err) { next(err) }
+  })
+
+  app.get('/api/friends/cruce', requireAuth, async (req, res, next) => {
+    try {
+      const ids = String(req.query.ids || '').split(',').map((id) => id.trim()).filter(Boolean)
+      res.json(await friends.compare(req.user.id, ids, chileClock()))
+    } catch (err) { next(err) }
+  })
+
+  app.get('/api/friends/:id/horario', requireAuth, async (req, res, next) => {
+    try { res.json(await friends.scheduleOf(req.user.id, req.params.id)) } catch (err) { next(err) }
+  })
+
+  app.post('/api/friends/:id/accept', requireAuth, async (req, res, next) => {
+    try { res.json(await friends.setStatus(req.user.id, req.params.id, 'accepted')) } catch (err) { next(err) }
+  })
+
+  app.post('/api/friends/:id/decline', requireAuth, async (req, res, next) => {
+    try { res.json(await friends.setStatus(req.user.id, req.params.id, 'declined')) } catch (err) { next(err) }
+  })
+
+  app.delete('/api/friends/:id', requireAuth, async (req, res, next) => {
+    try { res.json(await friends.setStatus(req.user.id, req.params.id, 'removed')) } catch (err) { next(err) }
   })
 
   // ── Datos por usuario ─────────────────────────────────────────────────────

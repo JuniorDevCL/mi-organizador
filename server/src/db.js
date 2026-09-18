@@ -27,6 +27,14 @@ const SCHEMA = [
      updated_at TEXT NOT NULL,
      PRIMARY KEY (user_id, key)
    )`,
+  `CREATE TABLE IF NOT EXISTS friendships (
+     id            TEXT PRIMARY KEY,
+     requester_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     addressee_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     status        TEXT NOT NULL,
+     created_at    TEXT NOT NULL,
+     UNIQUE (requester_id, addressee_id)
+   )`,
 ]
 
 const toSqlitePlaceholders = (sql) => sql.replace(/\$\d+/g, '?')

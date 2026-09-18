@@ -1,0 +1,242 @@
+import { randomUUID } from 'node:crypto'
+import { httpError, isValidEmail, normalizeEmail, isCampusEmail, publicUser } from './auth.js'
+import { UDP_BLOCKS, toMinutes } from './salas.js'
+
+const SCHEDULE_KEY = 'app_schedule_v1'
+const MAX_FRIENDS = 40
+
+export function publicSchedule(raw) {
+  if (!Array.isArray(raw)) return []
+  return raw.map((block) => ({
+    id: block.id,
+    day: Number(block.day),
+    startTime: String(block.startTime || ''),
+    endTime: String(block.endTime || ''),
+    subject: String(block.subject || block.courseName || ''),
+    eventType: String(block.eventType || ''),
+    location: String(block.location || block.campus || ''),
+    professor: String(block.professor || ''),
+  })).filter((block) => block.day >= 1 && block.day <= 6 && block.startTime && block.endTime)
+}
+
+export function blockOverlaps(entry, udpBlock) {
+  const start = toMinutes(entry.startTime)
+  const end = toMinutes(entry.endTime)
+  const bStart = toMinutes(udpBlock.start)
+  const bEnd = toMinutes(udpBlock.end)
+  return !(end <= bStart || start >= bEnd)
+}
+
+export function occupancyAtBlock(schedule, day, udpBlock) {
+  return publicSchedule(schedule).filter((entry) => entry.day === Number(day) && blockOverlaps(entry, udpBlock))
+}
+
+export function currentFriendBlock(schedule, { day, minutes }) {
+  const today = publicSchedule(schedule).filter((entry) => entry.day === day)
+  const current = today.find((entry) => toMinutes(entry.startTime) <= minutes && minutes < toMinutes(entry.endTime))
+  if (current) return { state: 'in_class', block: current }
+  const next = today
+    .filter((entry) => toMinutes(entry.startTime) > minutes)
+    .sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime))[0]
+  if (next) return { state: 'free_until', block: next }
+  return { state: 'free', block: null }
+}
+
+export function freeBlocksFor(people, { days = [1, 2, 3, 4, 5] } = {}) {
+  const slots = []
+  for (const day of days) {
+    for (const udpBlock of UDP_BLOCKS) {
+      const busy = people.map((person) => ({
+        id: person.id,
+        name: person.name,
+        classes: occupancyAtBlock(person.schedule, day, udpBlock),
+      }))
+      const allFree = busy.every((row) => row.classes.length === 0)
+      slots.push({
+        day,
+        block: udpBlock,
+        free: allFree,
+        people: busy,
+      })
+    }
+  }
+  return slots
+}
+
+async function readSchedule(db, userId) {
+  const row = await db.get(
+    'SELECT value FROM user_data WHERE user_id = $1 AND key = $2',
+    [userId, SCHEDULE_KEY],
+  )
+  if (!row?.value) return []
+  try { return publicSchedule(JSON.parse(row.value)) } catch { return [] }
+}
+
+const mapRow = (row, meId) => {
+  const incoming = row.addressee_id === meId
+  const friend = incoming
+    ? { id: row.requester_id, email: row.requester_email, name: row.requester_name }
+    : { id: row.addressee_id, email: row.addressee_email, name: row.addressee_name }
+  return {
+    id: row.id,
+    status: row.status,
+    createdAt: row.created_at,
+    incoming,
+    friend: publicUser({ id: friend.id, email: friend.email, name: friend.name, created_at: row.created_at }),
+  }
+}
+
+const FRIEND_SELECT = `
+  SELECT f.id, f.requester_id, f.addressee_id, f.status, f.created_at,
+         ru.email AS requester_email, ru.name AS requester_name,
+         au.email AS addressee_email, au.name AS addressee_name
+    FROM friendships f
+    JOIN users ru ON ru.id = f.requester_id
+    JOIN users au ON au.id = f.addressee_id
+`
+
+export function createFriendsService(db, { allowedEmailDomains } = {}) {
+  return {
+    async list(meId) {
+      const rows = await db.all(
+        `${FRIEND_SELECT} WHERE f.requester_id = $1 OR f.addressee_id = $2 ORDER BY f.created_at DESC`,
+        [meId, meId],
+      )
+      const mapped = rows.map((row) => mapRow(row, meId))
+      return {
+        friends: mapped.filter((row) => row.status === 'accepted'),
+        incoming: mapped.filter((row) => row.status === 'pending' && row.incoming),
+        outgoing: mapped.filter((row) => row.status === 'pending' && !row.incoming),
+      }
+    },
+
+    async invite(meId, email) {
+      const normalized = normalizeEmail(email)
+      if (!isValidEmail(normalized)) throw httpError(400, 'Correo inválido')
+      if (!isCampusEmail(normalized, allowedEmailDomains)) {
+        throw httpError(403, 'Solo puedes agregar correos institucionales UDP')
+      }
+      const me = await db.get('SELECT * FROM users WHERE id = $1', [meId])
+      if (me && normalizeEmail(me.email) === normalized) {
+        throw httpError(400, 'No puedes agregarte a ti mismo')
+      }
+      const other = await db.get('SELECT * FROM users WHERE email = $1', [normalized])
+      if (!other) {
+        throw httpError(404, 'Esa persona todavía no entra a la app. Pídele que inicie sesión con Google UDP.')
+      }
+
+      const existing = await db.get(
+        `SELECT * FROM friendships WHERE (requester_id = $1 AND addressee_id = $2) OR (requester_id = $3 AND addressee_id = $4)`,
+        [meId, other.id, other.id, meId],
+      )
+      if (existing?.status === 'accepted') throw httpError(409, 'Ya son amigos')
+      if (existing?.status === 'pending' && existing.requester_id === meId) {
+        throw httpError(409, 'Ya le enviaste una solicitud')
+      }
+      if (existing?.status === 'pending' && existing.addressee_id === meId) {
+        await db.run(
+          `UPDATE friendships SET status = $1 WHERE id = $2`,
+          ['accepted', existing.id],
+        )
+        return { id: existing.id, status: 'accepted', autoAccepted: true }
+      }
+
+      const acceptedCount = await db.all(
+        `SELECT id FROM friendships WHERE status = 'accepted' AND (requester_id = $1 OR addressee_id = $2)`,
+        [meId, meId],
+      )
+      if (acceptedCount.length >= MAX_FRIENDS) {
+        throw httpError(400, `Puedes tener hasta ${MAX_FRIENDS} amigos en el plan actual`)
+      }
+
+      const row = {
+        id: randomUUID(),
+        requester_id: meId,
+        addressee_id: other.id,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      }
+      await db.run(
+        `INSERT INTO friendships (id, requester_id, addressee_id, status, created_at)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [row.id, row.requester_id, row.addressee_id, row.status, row.created_at],
+      )
+      return { id: row.id, status: 'pending', friend: publicUser(other) }
+    },
+
+    async setStatus(meId, friendshipId, status) {
+      const row = await db.get(`${FRIEND_SELECT} WHERE f.id = $1`, [friendshipId])
+      if (!row) throw httpError(404, 'Solicitud no encontrada')
+      if (status === 'accepted') {
+        if (row.addressee_id !== meId) throw httpError(403, 'Solo quien recibe la solicitud puede aceptarla')
+        if (row.status !== 'pending') throw httpError(409, 'Esa solicitud ya no está pendiente')
+        await db.run(`UPDATE friendships SET status = $1 WHERE id = $2`, ['accepted', friendshipId])
+        return { id: friendshipId, status: 'accepted' }
+      }
+      if (status === 'declined' || status === 'removed') {
+        if (row.requester_id !== meId && row.addressee_id !== meId) {
+          throw httpError(403, 'No forma parte de esta solicitud')
+        }
+        await db.run('DELETE FROM friendships WHERE id = $1', [friendshipId])
+        return { id: friendshipId, status: 'removed' }
+      }
+      throw httpError(400, 'Acción no válida')
+    },
+
+    async requireAccepted(meId, friendshipId) {
+      const row = await db.get(`${FRIEND_SELECT} WHERE f.id = $1`, [friendshipId])
+      if (!row) throw httpError(404, 'Amistad no encontrada')
+      if (row.status !== 'accepted') throw httpError(403, 'Todavía no son amigos')
+      if (row.requester_id !== meId && row.addressee_id !== meId) {
+        throw httpError(403, 'No forma parte de esta amistad')
+      }
+      return mapRow(row, meId)
+    },
+
+    async scheduleOf(meId, friendshipId) {
+      const link = await this.requireAccepted(meId, friendshipId)
+      const schedule = await readSchedule(db, link.friend.id)
+      return { friendshipId, friend: link.friend, schedule }
+    },
+
+    async compare(meId, friendshipIds, clock) {
+      const uniqueIds = [...new Set((friendshipIds || []).filter(Boolean))]
+      const meSchedule = await readSchedule(db, meId)
+      const meUser = await db.get('SELECT * FROM users WHERE id = $1', [meId])
+      const people = [{
+        id: meId,
+        name: meUser?.name || 'Tú',
+        schedule: meSchedule,
+        self: true,
+      }]
+      for (const friendshipId of uniqueIds) {
+        const link = await this.requireAccepted(meId, friendshipId)
+        people.push({
+          id: link.friend.id,
+          name: link.friend.name,
+          schedule: await readSchedule(db, link.friend.id),
+          friendshipId,
+        })
+      }
+      const slots = freeBlocksFor(people)
+      const nowSlot = UDP_BLOCKS.find((block) =>
+        toMinutes(block.start) <= clock.minutes && clock.minutes < toMinutes(block.end),
+      ) || null
+      const snapshot = people.map((person) => ({
+        id: person.id,
+        name: person.name,
+        self: !!person.self,
+        friendshipId: person.friendshipId,
+        now: currentFriendBlock(person.schedule, { day: clock.day, minutes: clock.minutes }),
+      }))
+      return {
+        people: snapshot,
+        nowBlock: nowSlot,
+        freeNow: nowSlot
+          ? slots.find((slot) => slot.day === clock.day && slot.block.id === nowSlot.id)?.free ?? false
+          : false,
+        slots,
+      }
+    },
+  }
+}

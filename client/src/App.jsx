@@ -8,6 +8,9 @@ import {
 import { CURRICULUM, matchSemesterCourses, offeringHasInformaticaPlan } from './curriculum'
 import PluxeeTab from './PluxeeTab'
 import AdminUsers from './AdminUsers.jsx'
+import SalasTab from './SalasTab.jsx'
+import FriendsTab from './FriendsTab.jsx'
+import NotasTab from './NotasTab.jsx'
 import { LS, store } from './store'
 import { api } from './api'
 import {
@@ -180,6 +183,7 @@ const Icon = ({ name, size = 20 }) => {
     upload:   <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
     settings: <><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></>,
     map:     <><path d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></>,
+    grid:     <><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></>,
     user:    <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
     cloud:   <><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></>,
   }
@@ -1746,6 +1750,9 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
 const NAV_ITEMS = [
   { id: 'goals', label: 'Mi recorrido', icon: 'check' },
   { id: 'schedule', label: 'Horario', icon: 'book' },
+  { id: 'salas', label: 'Salas', icon: 'grid' },
+  { id: 'friends', label: 'Amigos', icon: 'user' },
+  { id: 'grades', label: 'Notas', icon: 'note' },
   { id: 'calendar', label: 'Agenda', icon: 'calendar' },
   { id: 'pluxee', label: 'Pluxee', icon: 'map' },
   { id: 'settings', label: 'Config', icon: 'settings' },
@@ -1768,6 +1775,7 @@ export default function App({ user, onLogout }) {
   const [offering, setOffering] = useState(() => LS.get('app_offering_v1', null))
   const [myCourses, setMyCourses] = useState(() => LS.get('app_my_courses_v1', []))
   const [sectionSelections, setSectionSelections] = useState(() => LS.get('app_section_sel_v1', {}))
+  const [grades, setGrades] = useState(() => LS.get('app_grades_v1', { courses: {} }))
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [showEventForm, setShowEventForm] = useState(false)
   const [showScheduleForm, setShowScheduleForm] = useState(false)
@@ -1789,6 +1797,7 @@ export default function App({ user, onLogout }) {
   useEffect(() => { LS.set('app_offering_v1', offering) }, [offering])
   useEffect(() => { LS.set('app_my_courses_v1', myCourses) }, [myCourses])
   useEffect(() => { LS.set('app_section_sel_v1', sectionSelections) }, [sectionSelections])
+  useEffect(() => { LS.set('app_grades_v1', grades) }, [grades])
   useEffect(() => {
     LS.set('app_dark_mode', darkMode)
     document.documentElement.classList.toggle('theme-dark', darkMode)
@@ -1942,7 +1951,7 @@ export default function App({ user, onLogout }) {
 
   const courseOptions = getCourseOptions(offering, myCourses, schedule)
   const current = NAV_ITEMS.find(n => n.id === tab) || NAV_ITEMS[0]
-  const showFab = tab !== 'settings' && tab !== 'pluxee'
+  const showFab = tab === 'goals' || tab === 'calendar' || tab === 'schedule'
   const firstName = (user?.name || '').split(' ')[0]
   const initials = (user?.name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
@@ -1965,6 +1974,12 @@ export default function App({ user, onLogout }) {
       darkMode={darkMode} setDarkMode={setDarkMode}
       showToast={showToast} onScheduleGenerated={() => setTab('schedule')}
       isAdmin={!!user?.admin} />
+  ) : tab === 'salas' ? (
+    <SalasTab />
+  ) : tab === 'friends' ? (
+    <FriendsTab />
+  ) : tab === 'grades' ? (
+    <NotasTab schedule={schedule} grades={grades} setGrades={setGrades} />
   ) : tab === 'pluxee' ? (
     <PluxeeTab />
   ) : (

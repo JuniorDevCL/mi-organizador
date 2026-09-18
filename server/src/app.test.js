@@ -80,6 +80,14 @@ describe('API', () => {
             headers: { 'Content-Type': 'application/json' },
           })
         }
+        if (href.includes('salas.docencia-eit.cl')) {
+          return new Response(JSON.stringify({
+            data: { allSalasUdps: { edges: [
+              { node: { code: 'CIT2013', section: 2, course: 'IA', place: 'E441.2.S201', start: '11:30:00', finish: '12:50:00', day: 1, teacher: 'Reyes' } },
+              { node: { code: 'CIT1000', section: 1, course: 'Programacion', place: 'V432.3.S312', start: '8:30:00', finish: '9:50:00', day: 1, teacher: 'Cruz' } },
+            ] } },
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
         if (href.includes('oauth2/v3/userinfo')) {
           assert.match(String(opts.headers?.Authorization || ''), /Bearer ya29\.test/)
           return new Response(JSON.stringify(googleProfile), {
@@ -289,6 +297,79 @@ describe('API', () => {
       assert.ok(user.createdAt)
       assert.ok(user.id)
     }
+  })
+
+  it('lists free and busy rooms for a UDP block', async () => {
+    const r = await call('/api/salas?dia=1&bloque=11:30')
+    assert.equal(r.status, 200)
+    assert.equal(r.json.ocupadas['E441.2.S201'].curso, 'IA')
+    assert.ok(r.json.vacias.includes('V432.3.S312'))
+  })
+
+  it('lets two UDP accounts become friends and compare schedules', async () => {
+    await signInGoogle({
+      email: 'ana@mail.udp.cl',
+      email_verified: true,
+      name: 'Ana',
+      sub: 'google-ana',
+    })
+    const saved = await call('/api/data', {
+      method: 'POST',
+      body: { data: { app_schedule_v1: [
+        { id: 'a1', day: 1, startTime: '11:30', endTime: '12:50', subject: 'IA' },
+      ] } },
+    })
+    assert.equal(saved.status, 200)
+
+    await signInGoogle({
+      email: 'owner@mail.udp.cl',
+      email_verified: true,
+      name: 'Alexis',
+      sub: 'google-owner',
+    })
+    const gmail = await call('/api/friends', { method: 'POST', body: { email: 'amigo@gmail.com' } })
+    assert.equal(gmail.status, 403)
+
+    const self = await call('/api/friends', { method: 'POST', body: { email: 'owner@mail.udp.cl' } })
+    assert.equal(self.status, 400)
+
+    const invite = await call('/api/friends', { method: 'POST', body: { email: 'Ana@Mail.udp.cl' } })
+    assert.equal(invite.status, 201)
+    assert.equal(invite.json.status, 'pending')
+
+    const asOwner = await call('/api/friends')
+    assert.equal(asOwner.json.outgoing.length, 1)
+    const friendshipId = asOwner.json.outgoing[0].id
+
+    await signInGoogle({
+      email: 'ana@mail.udp.cl',
+      email_verified: true,
+      name: 'Ana',
+      sub: 'google-ana',
+    })
+    const asAna = await call('/api/friends')
+    assert.equal(asAna.json.incoming.length, 1)
+    const accepted = await call(`/api/friends/${friendshipId}/accept`, { method: 'POST' })
+    assert.equal(accepted.status, 200)
+
+    const horario = await call(`/api/friends/${friendshipId}/horario`)
+    assert.equal(horario.status, 200)
+    assert.equal(horario.json.friend.email, 'owner@mail.udp.cl')
+
+    await signInGoogle({
+      email: 'owner@mail.udp.cl',
+      email_verified: true,
+      name: 'Alexis',
+      sub: 'google-owner',
+    })
+    const anaHorario = await call(`/api/friends/${friendshipId}/horario`)
+    assert.equal(anaHorario.json.schedule[0].subject, 'IA')
+
+    const cruce = await call(`/api/friends/cruce?ids=${friendshipId}`)
+    assert.equal(cruce.status, 200)
+    assert.ok(cruce.json.slots.length >= 7)
+    const busy = cruce.json.slots.find((slot) => slot.day === 1 && slot.block.id === '11:30')
+    assert.equal(busy.free, false)
   })
 })
 
