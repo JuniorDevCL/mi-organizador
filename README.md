@@ -20,7 +20,8 @@ Versión 2: **frontend + backend con cuentas de usuario**. Toda la información 
 │       ├── app.js     # Rutas /api/auth y /api/data
 │       ├── auth.js    # Registro, login, sesiones JWT (cookie httpOnly)
 │       └── db.js      # Postgres (producción) o SQLite (desarrollo)
-├── render.yaml      # Blueprint para desplegar en Render
+├── vercel.json      # Frontend Vite + API Express en Vercel
+├── render.yaml      # Alternativa: Blueprint para Render
 └── package.json     # Workspaces (client + server)
 ```
 
@@ -46,30 +47,28 @@ Tests:
 npm test
 ```
 
-## Despliegue en Render
+## Despliegue en Vercel
 
-El repo incluye un **Blueprint** (`render.yaml`) que crea:
-
-- Un **Web Service** Node (`mi-organizador`) que compila el frontend y sirve la API y la web en la misma URL.
-- Una base **Postgres** (`mi-organizador-db`) conectada mediante `DATABASE_URL`.
-
-Pasos:
-
-1. Sube este repositorio a GitHub.
-2. En Render: **New → Blueprint**, elige el repo y confirma. Render lee `render.yaml`, crea la base y el servicio y hace el primer deploy.
-3. (Opcional) Para Google Calendar, agrega la variable `VITE_GOOGLE_CLIENT_ID` en el servicio y vuelve a desplegar. En Google Cloud, añade la URL de Render (`https://<servicio>.onrender.com`) a los *Authorized JavaScript origins*.
-
-> El plan gratuito de Postgres en Render expira a los 30 días; puedes cambiarlo a un plan pago en `render.yaml` (`plan: starter`) o crear la base a mano y pegar su `DATABASE_URL`.
-
-Si prefieres crear el servicio manualmente en lugar del Blueprint:
+Importa **`JuniorDevCL/mi-organizador`** (no `mi-organizador-cloud`, ese repo está vacío), rama **`master`**.
 
 | Campo | Valor |
 |---|---|
-| Runtime | Node |
-| Build Command | `npm install && npm run build` |
-| Start Command | `npm start` |
-| Health Check Path | `/api/health` |
-| Variables | `NODE_VERSION=22.14.0`, `JWT_SECRET=<aleatorio>`, `DATABASE_URL=<postgres>` |
+| Framework Preset | Other (Vercel usa `vercel.json`) |
+| Root Directory | `./` |
+
+Variables de entorno (Production y Preview):
+
+| Variable | Valor |
+|---|---|
+| `JWT_SECRET` | una clave larga aleatoria |
+| `DATABASE_URL` | conexión de Postgres (en Vercel: **Storage → Create Database → Neon**) |
+| `VITE_GOOGLE_CLIENT_ID` | opcional, para Google Calendar |
+
+En Google Cloud, autoriza el origen `https://<tu-proyecto>.vercel.app`.
+
+## Alternativa: Render
+
+El repo también incluye `render.yaml` (Web Service + Postgres). **Start Command:** `npm start`. **Build Command:** `npm install && npm run build`.
 
 ## API
 
@@ -91,6 +90,6 @@ Las sesiones usan una cookie `httpOnly` firmada con `JWT_SECRET` (30 días). Las
 | Variable | Dónde | Descripción |
 |---|---|---|
 | `PORT` | server | Puerto HTTP (Render lo define) |
-| `JWT_SECRET` | server | Clave para firmar sesiones (obligatoria en producción) |
-| `DATABASE_URL` | server | Postgres; si falta se usa SQLite en `server/data/app.db` |
+| `JWT_SECRET` | server | Clave para firmar sesiones (obligatoria en Vercel) |
+| `DATABASE_URL` | server | Postgres; si falta en local se usa SQLite |
 | `VITE_GOOGLE_CLIENT_ID` | client (build) | OAuth de Google Calendar (opcional) |

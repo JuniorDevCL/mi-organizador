@@ -1,6 +1,6 @@
 /**
  * Capa de acceso a datos con dos adaptadores:
- *  - Postgres (DATABASE_URL definida) → producción en Render.
+ *  - Postgres (DATABASE_URL definida) → producción (Vercel/Render).
  *  - SQLite (node:sqlite)             → desarrollo local sin dependencias nativas.
  *
  * Todas las consultas usan placeholders estilo Postgres ($1, $2, …) y se
@@ -77,6 +77,9 @@ async function createSqlite(file) {
 
 export async function createDb({ databaseUrl = process.env.DATABASE_URL, sqliteFile } = {}) {
   if (databaseUrl) return createPostgres(databaseUrl)
+  if (process.env.VERCEL) {
+    throw new Error('Falta DATABASE_URL (Postgres) para desplegar en Vercel')
+  }
   const file = sqliteFile || process.env.SQLITE_FILE || join(__dir, '..', 'data', 'app.db')
   return createSqlite(file)
 }
