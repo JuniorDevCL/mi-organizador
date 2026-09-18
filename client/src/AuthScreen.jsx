@@ -65,7 +65,9 @@ export default function AuthScreen({ onAuthenticated }) {
 
         <h2 className="auth-card-title">{isRegister ? 'Crea tu cuenta' : 'Bienvenido de vuelta'}</h2>
         <p className="auth-card-sub">
-          {isRegister ? 'Guarda tu información y accede desde cualquier dispositivo.' : 'Ingresa con tu correo y contraseña.'}
+          {isRegister
+            ? 'Usa tu correo institucional UDP (@mail.udp.cl) para guardar tu información.'
+            : 'Entra con tu correo @mail.udp.cl y tu contraseña.'}
         </p>
 
         {isRegister && (
@@ -77,7 +79,7 @@ export default function AuthScreen({ onAuthenticated }) {
         <label className="field">
           <span>Correo</span>
           <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-            placeholder="tu@correo.com" autoComplete="email" inputMode="email" required />
+            placeholder="tu@mail.udp.cl" autoComplete="email" inputMode="email" required />
         </label>
         <label className="field">
           <span>Contraseña</span>

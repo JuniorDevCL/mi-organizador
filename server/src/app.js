@@ -5,7 +5,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   COOKIE_NAME, cookieOptions, createAuthService, verifySession, httpError,
-  parseAdminEmails, isAdminEmail,
+  parseAdminEmails, isAdminEmail, parseAllowedEmailDomains, isCampusEmail,
 } from './auth.js'
 import { catalogPayload } from './udpCareers.js'
 import { loadCareerOffering } from './oferta.js'
@@ -32,9 +32,10 @@ const MAX_VALUE_BYTES = 2 * 1024 * 1024
 export function createApp({
   db, jwtSecret, serveClient = true, fetchImpl = fetch,
   adminEmails = parseAdminEmails(),
+  allowedEmailDomains = parseAllowedEmailDomains(),
 } = {}) {
   const app = express()
-  const auth = createAuthService(db, jwtSecret)
+  const auth = createAuthService(db, jwtSecret, { allowedEmailDomains })
   const admin = (user) => isAdminEmail(user?.email, adminEmails)
   const withRole = (user) => ({ user, admin: admin(user) })
 
@@ -51,6 +52,10 @@ export function createApp({
     if (!user) {
       res.clearCookie(COOKIE_NAME, { path: '/' })
       return next(httpError(401, 'Sesión inválida'))
+    }
+    if (!isCampusEmail(user.email, allowedEmailDomains)) {
+      res.clearCookie(COOKIE_NAME, { path: '/' })
+      return next(httpError(401, 'No has iniciado sesión'))
     }
     req.user = user
     next()

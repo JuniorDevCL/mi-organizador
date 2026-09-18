@@ -28,6 +28,38 @@ export function isAdminEmail(email, adminEmails = parseAdminEmails()) {
   return adminEmails.includes(normalizeEmail(email))
 }
 
+/** Dominio institucional por defecto: @udp.cl y cualquier subdominio (@mail.udp.cl, etc.). */
+export const DEFAULT_EMAIL_DOMAINS = ['udp.cl']
+
+export function parseAllowedEmailDomains(raw = process.env.ALLOWED_EMAIL_DOMAINS) {
+  if (raw == null || String(raw).trim() === '') return [...DEFAULT_EMAIL_DOMAINS]
+  return [...new Set(
+    String(raw)
+      .split(/[,;\s]+/)
+      .map((part) => part.trim().toLowerCase().replace(/^@/, ''))
+      .filter(Boolean),
+  )]
+}
+
+export function emailDomain(email) {
+  const normalized = normalizeEmail(email)
+  const at = normalized.lastIndexOf('@')
+  return at >= 0 ? normalized.slice(at + 1) : ''
+}
+
+export function isCampusEmail(email, domains = parseAllowedEmailDomains()) {
+  const domain = emailDomain(email)
+  if (!domain) return false
+  return domains.some((allowed) => domain === allowed || domain.endsWith(`.${allowed}`))
+}
+
+export function campusEmailError(domains = parseAllowedEmailDomains()) {
+  const examples = domains.includes('udp.cl')
+    ? '@mail.udp.cl'
+    : domains.map((d) => `@${d}`).join(' o ')
+  return `Solo se puede entrar con un correo institucional UDP (${examples})`
+}
+
 export function cookieOptions() {
   return {
     httpOnly: true,
@@ -51,12 +83,19 @@ export function verifySession(token, secret) {
   }
 }
 
-export function createAuthService(db, secret) {
+export function createAuthService(db, secret, { allowedEmailDomains = parseAllowedEmailDomains() } = {}) {
+  const assertCampusEmail = (email) => {
+    if (!isCampusEmail(email, allowedEmailDomains)) {
+      throw httpError(403, campusEmailError(allowedEmailDomains))
+    }
+  }
+
   return {
     async register({ email, name, password }) {
       const normalized = normalizeEmail(email)
       const cleanName = String(name || '').trim()
       if (!isValidEmail(normalized)) throw httpError(400, 'Correo inválido')
+      assertCampusEmail(normalized)
       if (cleanName.length < 2) throw httpError(400, 'Escribe tu nombre')
       if (String(password || '').length < 6) throw httpError(400, 'La contraseña debe tener al menos 6 caracteres')
 
@@ -79,6 +118,7 @@ export function createAuthService(db, secret) {
 
     async login({ email, password }) {
       const normalized = normalizeEmail(email)
+      assertCampusEmail(normalized)
       const row = await db.get('SELECT * FROM users WHERE email = $1', [normalized])
       const ok = row && await bcrypt.compare(String(password || ''), row.password_hash)
       if (!ok) throw httpError(401, 'Correo o contraseña incorrectos')

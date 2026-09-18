@@ -65,7 +65,7 @@ Variables de entorno (Production y Preview):
 | `JWT_SECRET` | una clave larga aleatoria |
 | `DATABASE_URL` | conexión de Postgres (en Vercel: **Storage → Create Database → Neon**) |
 | `VITE_GOOGLE_CLIENT_ID` | opcional, para Google Calendar |
-| `ADMIN_EMAILS` | tu correo de login, para ver quién se unió (Config) |
+| `ADMIN_EMAILS` | tu correo UDP de login, para ver quién se unió (Config) |
 
 En Google Cloud, autoriza el origen `https://<tu-proyecto>.vercel.app`.
 
@@ -77,8 +77,8 @@ El repo también incluye `render.yaml` (Web Service + Postgres). **Start Command
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/api/auth/register` | `{ email, name, password }` → crea cuenta e inicia sesión |
-| POST | `/api/auth/login` | `{ email, password }` |
+| POST | `/api/auth/register` | `{ email, name, password }` → crea cuenta e inicia sesión (solo correo UDP) |
+| POST | `/api/auth/login` | `{ email, password }` (solo correo UDP) |
 | POST | `/api/auth/logout` | Cierra la sesión |
 | GET | `/api/auth/me` | Usuario actual (`{ user, admin }`) |
 | GET | `/api/admin/users` | Lista de cuentas (solo correos en `ADMIN_EMAILS`) |
@@ -89,7 +89,7 @@ El repo también incluye `render.yaml` (Web Service + Postgres). **Start Command
 | GET | `/api/oferta` | Catálogo de carreras UDP (2° semestre 2026) |
 | GET | `/api/oferta/:id` | Oferta parseada de esa carrera (secciones y horarios) |
 
-Las sesiones usan una cookie `httpOnly` firmada con `JWT_SECRET` (30 días). Las contraseñas se guardan con bcrypt.
+Las sesiones usan una cookie `httpOnly` firmada con `JWT_SECRET` (30 días). Las contraseñas se guardan con bcrypt. **Solo correos institucionales UDP** (`@mail.udp.cl`, `@udp.cl` y subdominios) pueden registrarse o iniciar sesión.
 
 ## Variables de entorno
 
@@ -99,4 +99,5 @@ Las sesiones usan una cookie `httpOnly` firmada con `JWT_SECRET` (30 días). Las
 | `JWT_SECRET` | server | Clave para firmar sesiones (obligatoria en Vercel) |
 | `DATABASE_URL` | server | Postgres; si falta en local se usa SQLite |
 | `ADMIN_EMAILS` | server | Correos que pueden ver la lista de cuentas (separados por coma) |
+| `ALLOWED_EMAIL_DOMAINS` | server | Dominios permitidos para entrar. Por defecto `udp.cl` (incluye `@mail.udp.cl`) |
 | `VITE_GOOGLE_CLIENT_ID` | client (build) | OAuth de Google Calendar (opcional) |

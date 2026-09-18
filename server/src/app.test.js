@@ -29,7 +29,7 @@ describe('API', () => {
       db,
       jwtSecret: 'test-secret',
       serveClient: false,
-      adminEmails: ['owner@example.com'],
+      adminEmails: ['owner@mail.udp.cl'],
     })
     await new Promise(resolve => { server = app.listen(0, resolve) })
     base = `http://127.0.0.1:${server.address().port}`
@@ -58,10 +58,10 @@ describe('API', () => {
 
   it('registers, persists data and reads it back', async () => {
     const reg = await call('/api/auth/register', {
-      method: 'POST', body: { email: 'Ana@Example.com', name: 'Ana', password: 'secreto1' },
+      method: 'POST', body: { email: 'Ana@Mail.udp.cl', name: 'Ana', password: 'secreto1' },
     })
     assert.equal(reg.status, 201)
-    assert.equal(reg.json.user.email, 'ana@example.com')
+    assert.equal(reg.json.user.email, 'ana@mail.udp.cl')
     assert.equal(reg.json.admin, false)
     assert.ok(cookieJar.has('mo_session'))
 
@@ -93,14 +93,14 @@ describe('API', () => {
 
   it('prevents duplicate accounts and validates login', async () => {
     const dup = await call('/api/auth/register', {
-      method: 'POST', body: { email: 'ana@example.com', name: 'Ana', password: 'secreto1' },
+      method: 'POST', body: { email: 'ana@mail.udp.cl', name: 'Ana', password: 'secreto1' },
     })
     assert.equal(dup.status, 409)
 
-    const bad = await call('/api/auth/login', { method: 'POST', body: { email: 'ana@example.com', password: 'mal' } })
+    const bad = await call('/api/auth/login', { method: 'POST', body: { email: 'ana@mail.udp.cl', password: 'mal' } })
     assert.equal(bad.status, 401)
 
-    const ok = await call('/api/auth/login', { method: 'POST', body: { email: 'ana@example.com', password: 'secreto1' } })
+    const ok = await call('/api/auth/login', { method: 'POST', body: { email: 'ana@mail.udp.cl', password: 'secreto1' } })
     assert.equal(ok.status, 200)
   })
 
@@ -128,7 +128,7 @@ describe('API', () => {
     assert.equal(anon.status, 401)
 
     const asAna = await call('/api/auth/login', {
-      method: 'POST', body: { email: 'ana@example.com', password: 'secreto1' },
+      method: 'POST', body: { email: 'ana@mail.udp.cl', password: 'secreto1' },
     })
     assert.equal(asAna.status, 200)
     assert.equal(asAna.json.admin, false)
@@ -141,7 +141,7 @@ describe('API', () => {
   it('lets an admin list registered people without password hashes', async () => {
     const owner = await call('/api/auth/register', {
       method: 'POST',
-      body: { email: 'Owner@Example.com', name: 'Alexis', password: 'secreto1' },
+      body: { email: 'Owner@Mail.udp.cl', name: 'Alexis', password: 'secreto1' },
     })
     assert.equal(owner.status, 201)
     assert.equal(owner.json.admin, true)
@@ -152,7 +152,7 @@ describe('API', () => {
     assert.equal(list.json.users.length, list.json.total)
     assert.deepEqual(
       list.json.users.map(u => u.email).sort(),
-      ['ana@example.com', 'owner@example.com'],
+      ['ana@mail.udp.cl', 'owner@mail.udp.cl'],
     )
     for (const user of list.json.users) {
       assert.equal(user.password_hash, undefined)
@@ -160,5 +160,30 @@ describe('API', () => {
       assert.ok(user.createdAt)
       assert.ok(user.id)
     }
+  })
+
+  it('rejects Gmail and other non-UDP emails on register and login', async () => {
+    const message = 'Solo se puede entrar con un correo institucional UDP (@mail.udp.cl)'
+
+    const reg = await call('/api/auth/register', {
+      method: 'POST',
+      body: { email: 'alexis@gmail.com', name: 'Alexis', password: 'secreto1' },
+    })
+    assert.equal(reg.status, 403)
+    assert.equal(reg.json.error, message)
+
+    const login = await call('/api/auth/login', {
+      method: 'POST',
+      body: { email: 'alexis@gmail.com', password: 'secreto1' },
+    })
+    assert.equal(login.status, 403)
+    assert.equal(login.json.error, message)
+
+    const ok = await call('/api/auth/register', {
+      method: 'POST',
+      body: { email: 'ana.udp@mail.udp.cl', name: 'Ana UDP', password: 'secreto1' },
+    })
+    assert.equal(ok.status, 201)
+    assert.equal(ok.json.user.email, 'ana.udp@mail.udp.cl')
   })
 })
