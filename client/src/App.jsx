@@ -11,6 +11,7 @@ import AdminUsers from './AdminUsers.jsx'
 import SalasTab from './SalasTab.jsx'
 import FriendsTab from './FriendsTab.jsx'
 import NotasTab from './NotasTab.jsx'
+import SolemnesPanel from './SolemnesPanel.jsx'
 import { LS, store } from './store'
 import { api } from './api'
 import {
@@ -1668,8 +1669,38 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
   const upcoming = [...events].filter(e => new Date(e.date + 'T23:59') >= now).sort((a, b) => new Date(a.date) - new Date(b.date))
   const past = [...events].filter(e => new Date(e.date + 'T23:59') < now).sort((a, b) => new Date(b.date) - new Date(a.date))
 
+  const importSolemnes = async (created) => {
+    const existing = new Set(events.map((ev) => ev.id))
+    const next = created.filter((ev) => !existing.has(ev.id))
+    if (!next.length) {
+      showToast('Esas solemnes ya están en la agenda', 'warn')
+      return
+    }
+    setEvents((prev) => [...next, ...prev])
+    if (gToken) {
+      let synced = 0
+      for (const ev of next) {
+        if (await pushToGCal(ev, { quiet: true })) synced += 1
+      }
+      showToast(
+        synced
+          ? `${next.length} solemne${next.length === 1 ? '' : 's'} en la agenda (${synced} en Google)`
+          : `${next.length} solemne${next.length === 1 ? '' : 's'} en la agenda`,
+        synced ? 'ok' : 'warn',
+      )
+    } else {
+      showToast(`${next.length} solemne${next.length === 1 ? '' : 's'} agregada${next.length === 1 ? '' : 's'} a la agenda ✓`)
+    }
+  }
+
   return (
     <div>
+      <SolemnesPanel
+        courseOptions={courseOptions}
+        schedule={schedule}
+        events={events}
+        onImport={importSolemnes}
+      />
       <div style={{
         background: gToken ? 'var(--success-bg)' : 'var(--info-bg)', borderRadius: 14, padding: '12px 14px',
         marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10,
@@ -1713,7 +1744,7 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
           </div>
           <p style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>Sin eventos</p>
           <p style={{ marginTop: 6, fontSize: 13, color: 'var(--text-faint)', lineHeight: 1.6 }}>
-            Agrega tus controles, solemnes y tareas<br />para tenerlos todos organizados.
+            Agrega tus controles y tareas, o importa las solemnes<br />según los ramos de tu horario.
           </p>
         </div>
       )}

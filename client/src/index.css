@@ -938,3 +938,69 @@ input, textarea, select {
   .campus-grid, .cruce-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .nota-exam { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+.sol-panel { margin-bottom: 16px; }
+.sol-title { margin: 2px 0 0; font-size: 16px; font-weight: 800; color: var(--text); }
+.sol-school {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--err-bg);
+  color: var(--err-text);
+}
+.sol-add-all { width: 100%; height: auto; padding: 10px 14px; }
+.sol-list { display: flex; flex-direction: column; }
+.sol-exam {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-faint);
+}
+.sol-exam:last-child { border-bottom: none; }
+.sol-exam-name { font-weight: 700; font-size: 14px; color: var(--text); }
+.sol-exam-meta { margin-top: 2px; font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+.sol-status { font-size: 11px; font-weight: 700; color: var(--success-text); white-space: nowrap; }
+.sol-week {
+  display: grid;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.sol-day {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border-faint);
+  border-radius: 12px;
+  background: var(--bg-muted);
+}
+.sol-slot { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.sol-slot-time { font-size: 11px; font-weight: 800; color: var(--accent); letter-spacing: 0.04em; }
+.sol-pill {
+  text-align: left;
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-family: inherit;
+}
+.sol-pill.match {
+  background: var(--err-bg);
+  border-color: var(--err-border);
+  color: var(--err-text);
+  font-weight: 700;
+  cursor: pointer;
+}
+.sol-pill.match:disabled { cursor: default; opacity: 0.85; }
+.sol-pill.dim { opacity: 0.55; }
+
+@media (min-width: 880px) {
+  .sol-week { grid-template-columns: repeat(5, minmax(140px, 1fr)); }
+}
