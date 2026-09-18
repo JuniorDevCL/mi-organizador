@@ -63,7 +63,7 @@ function Root() {
 
   if (phase === 'checking') return <Splash />
   if (phase === 'loading') return <Splash label={`Hola ${user?.name?.split(' ')[0] || ''}, cargando tus datos…`} />
-  if (phase === 'anon') return <AuthScreen onAuthenticated={enter} />
+  if (phase === 'anon') return <AuthScreen />
   return <App key={user.id} user={user} onLogout={logout} />
 }
 

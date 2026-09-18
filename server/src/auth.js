@@ -125,6 +125,33 @@ export function createAuthService(db, secret, { allowedEmailDomains = parseAllow
       return { user: publicUser(row), token: signSession(row, secret) }
     },
 
+    async loginWithGoogle({ email, name }) {
+      const normalized = normalizeEmail(email)
+      if (!isValidEmail(normalized)) throw httpError(400, 'Correo inválido')
+      assertCampusEmail(normalized)
+      const fromGoogle = String(name || '').trim()
+      const fallback = normalized.split('@')[0] || 'Estudiante'
+      const cleanName = fromGoogle.length >= 2 ? fromGoogle : fallback
+
+      const existing = await db.get('SELECT * FROM users WHERE email = $1', [normalized])
+      if (existing) {
+        return { user: publicUser(existing), token: signSession(existing, secret), created: false }
+      }
+
+      const row = {
+        id: randomUUID(),
+        email: normalized,
+        name: cleanName,
+        password_hash: await bcrypt.hash(randomUUID(), 10),
+        created_at: new Date().toISOString(),
+      }
+      await db.run(
+        'INSERT INTO users (id, email, name, password_hash, created_at) VALUES ($1, $2, $3, $4, $5)',
+        [row.id, row.email, row.name, row.password_hash, row.created_at],
+      )
+      return { user: publicUser(row), token: signSession(row, secret), created: true }
+    },
+
     async userById(id) {
       const row = await db.get('SELECT * FROM users WHERE id = $1', [id])
       return row ? publicUser(row) : null

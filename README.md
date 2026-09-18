@@ -64,10 +64,17 @@ Variables de entorno (Production y Preview):
 |---|---|
 | `JWT_SECRET` | una clave larga aleatoria |
 | `DATABASE_URL` | conexión de Postgres (en Vercel: **Storage → Create Database → Neon**) |
-| `VITE_GOOGLE_CLIENT_ID` | opcional, para Google Calendar |
+| `VITE_GOOGLE_CLIENT_ID` | opcional, para Google Calendar (puede ser el mismo client id) |
+| `GOOGLE_CLIENT_ID` | el Client ID de Google (si no está, se usa `VITE_GOOGLE_CLIENT_ID`) |
+| `GOOGLE_CLIENT_SECRET` | el secreto del cliente web, para el login con Google |
 | `ADMIN_EMAILS` | tu correo UDP de login, para ver quién se unió (Config) |
 
-En Google Cloud, autoriza el origen `https://<tu-proyecto>.vercel.app`.
+En Google Cloud, el cliente OAuth tipo **Aplicación web** necesita:
+
+- Orígenes JavaScript: `https://<tu-proyecto>.vercel.app` y `http://localhost:5173`
+- URI de redirección: `https://<tu-proyecto>.vercel.app/api/auth/google/callback` (y en local `http://localhost:5173/api/auth/google/callback`)
+
+El login de la app **solo usa Google**. Gmail personal queda fuera; hay que elegir `@mail.udp.cl`.
 
 ## Alternativa: Render
 
@@ -77,8 +84,10 @@ El repo también incluye `render.yaml` (Web Service + Postgres). **Start Command
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| POST | `/api/auth/register` | `{ email, name, password }` → crea cuenta e inicia sesión (solo correo UDP) |
-| POST | `/api/auth/login` | `{ email, password }` (solo correo UDP) |
+| POST | `/api/auth/register` | Deshabilitado (410). Usar Google |
+| POST | `/api/auth/login` | Deshabilitado (410). Usar Google |
+| GET | `/api/auth/google` | Redirige a Google para entrar con correo UDP |
+| GET | `/api/auth/google/callback` | Vuelve de Google, crea o reutiliza la cuenta y abre sesión |
 | POST | `/api/auth/logout` | Cierra la sesión |
 | GET | `/api/auth/me` | Usuario actual (`{ user, admin }`) |
 | GET | `/api/admin/users` | Lista de cuentas (solo correos en `ADMIN_EMAILS`) |
@@ -89,7 +98,7 @@ El repo también incluye `render.yaml` (Web Service + Postgres). **Start Command
 | GET | `/api/oferta` | Catálogo de carreras UDP (2° semestre 2026) |
 | GET | `/api/oferta/:id` | Oferta parseada de esa carrera (secciones y horarios) |
 
-Las sesiones usan una cookie `httpOnly` firmada con `JWT_SECRET` (30 días). Las contraseñas se guardan con bcrypt. **Solo correos institucionales UDP** (`@mail.udp.cl`, `@udp.cl` y subdominios) pueden registrarse o iniciar sesión.
+Las sesiones usan una cookie `httpOnly` firmada con `JWT_SECRET` (30 días). **Solo correos institucionales UDP** pueden entrar, a través de Google (`@mail.udp.cl`, `@udp.cl` y subdominios).
 
 ## Variables de entorno
 
@@ -100,4 +109,7 @@ Las sesiones usan una cookie `httpOnly` firmada con `JWT_SECRET` (30 días). Las
 | `DATABASE_URL` | server | Postgres; si falta en local se usa SQLite |
 | `ADMIN_EMAILS` | server | Correos que pueden ver la lista de cuentas (separados por coma) |
 | `ALLOWED_EMAIL_DOMAINS` | server | Dominios permitidos para entrar. Por defecto `udp.cl` (incluye `@mail.udp.cl`) |
+| `GOOGLE_CLIENT_ID` | server | Client ID de Google para el login (si falta, usa `VITE_GOOGLE_CLIENT_ID`) |
+| `GOOGLE_CLIENT_SECRET` | server | Secreto del cliente web de Google |
+| `PUBLIC_URL` | server | Origen público opcional (si no, se toma del request) |
 | `VITE_GOOGLE_CLIENT_ID` | client (build) | OAuth de Google Calendar (opcional) |

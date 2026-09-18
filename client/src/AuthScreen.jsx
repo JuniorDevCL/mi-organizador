@@ -1,33 +1,21 @@
-import { useState } from 'react'
-import { api } from './api'
+import { useEffect, useState } from 'react'
 
-export default function AuthScreen({ onAuthenticated }) {
-  const [mode, setMode] = useState('login')
-  const [email, setEmail] = useState('')
-  const [name, setName] = useState('')
-  const [password, setPassword] = useState('')
+const ERRORS = {
+  udp: 'Solo se puede entrar con un correo institucional UDP (@mail.udp.cl). Elige esa cuenta en Google.',
+  google: 'No se pudo entrar con Google. Inténtalo de nuevo.',
+  config: 'Falta configurar Google en el servidor (GOOGLE_CLIENT_SECRET y la URI de redirección).',
+}
+
+export default function AuthScreen() {
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
 
-  const isRegister = mode === 'register'
-  const canSubmit = email.trim() && password.length >= 6 && (!isRegister || name.trim().length >= 2)
-
-  const submit = async (e) => {
-    e.preventDefault()
-    if (!canSubmit || busy) return
-    setBusy(true)
-    setError('')
-    try {
-      const payload = isRegister
-        ? await api.register(email, name, password)
-        : await api.login(email, password)
-      onAuthenticated({ ...payload.user, admin: !!payload.admin })
-    } catch (err) {
-      setError(err.message || 'No se pudo iniciar sesión')
-    } finally {
-      setBusy(false)
-    }
-  }
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('error')
+    if (!code) return
+    setError(ERRORS[code] || ERRORS.google)
+    window.history.replaceState({}, '', window.location.pathname)
+  }, [])
 
   return (
     <div className="auth-page">
@@ -51,55 +39,30 @@ export default function AuthScreen({ onAuthenticated }) {
         </ul>
       </div>
 
-      <form className="auth-card" onSubmit={submit}>
-        <div className="auth-switch" role="tablist">
-          <button type="button" role="tab" aria-selected={!isRegister}
-            className={!isRegister ? 'active' : ''} onClick={() => { setMode('login'); setError('') }}>
-            Iniciar sesión
-          </button>
-          <button type="button" role="tab" aria-selected={isRegister}
-            className={isRegister ? 'active' : ''} onClick={() => { setMode('register'); setError('') }}>
-            Crear cuenta
-          </button>
-        </div>
-
-        <h2 className="auth-card-title">{isRegister ? 'Crea tu cuenta' : 'Bienvenido de vuelta'}</h2>
+      <div className="auth-card">
+        <h2 className="auth-card-title">Entra con tu correo UDP</h2>
         <p className="auth-card-sub">
-          {isRegister
-            ? 'Usa tu correo institucional UDP (@mail.udp.cl) para guardar tu información.'
-            : 'Entra con tu correo @mail.udp.cl y tu contraseña.'}
+          Te redirigimos a Google. Usa tu cuenta institucional (@mail.udp.cl), no Gmail personal.
         </p>
-
-        {isRegister && (
-          <label className="field">
-            <span>Nombre</span>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Cómo te llamamos" autoComplete="name" />
-          </label>
-        )}
-        <label className="field">
-          <span>Correo</span>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-            placeholder="tu@mail.udp.cl" autoComplete="email" inputMode="email" required />
-        </label>
-        <label className="field">
-          <span>Contraseña</span>
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-            placeholder="Mínimo 6 caracteres" autoComplete={isRegister ? 'new-password' : 'current-password'} required minLength={6} />
-        </label>
 
         {error && <p className="auth-error" role="alert">{error}</p>}
 
-        <button type="submit" className="btn-primary auth-submit" disabled={!canSubmit || busy}>
-          {busy ? 'Un momento…' : isRegister ? 'Crear cuenta' : 'Entrar'}
-        </button>
-
-        <p className="auth-foot">
-          {isRegister ? '¿Ya tienes cuenta? ' : '¿Primera vez aquí? '}
-          <button type="button" className="link" onClick={() => { setMode(isRegister ? 'login' : 'register'); setError('') }}>
-            {isRegister ? 'Inicia sesión' : 'Crea una cuenta'}
-          </button>
-        </p>
-      </form>
+        <a className="btn-google" href="/api/auth/google">
+          <GoogleMark />
+          Continuar con Google
+        </a>
+      </div>
     </div>
+  )
+}
+
+function GoogleMark() {
+  return (
+    <svg className="btn-google-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+      <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.51h6.47a5.53 5.53 0 0 1-2.4 3.63v3.01h3.87c2.27-2.09 3.55-5.17 3.55-8.88z" />
+      <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.85l-3.87-3.01c-1.08.72-2.45 1.15-4.08 1.15-3.13 0-5.78-2.11-6.73-4.96H1.28v3.09A12 12 0 0 0 12 24z" />
+      <path fill="#FBBC05" d="M5.27 14.33A7.2 7.2 0 0 1 4.89 12c0-.81.14-1.59.38-2.33V6.58H1.28A12 12 0 0 0 0 12c0 1.94.46 3.77 1.28 5.42l3.99-3.09z" />
+      <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.44-3.44C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.69 1.28 6.58l3.99 3.09C6.22 6.86 8.87 4.75 12 4.75z" />
+    </svg>
   )
 }

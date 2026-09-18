@@ -2,24 +2,62 @@ import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { createDb } from './db.js'
 import { createApp } from './app.js'
+import { OAUTH_STATE_COOKIE } from './googleAuth.js'
 
 let server, base, db
+let googleProfile = {
+  email: 'ana@mail.udp.cl',
+  email_verified: true,
+  name: 'Ana',
+  sub: 'google-ana',
+}
 
 const cookieJar = new Map()
-const call = async (path, { method = 'GET', body, cookie = true } = {}) => {
+
+const storeCookies = (res) => {
+  const raw = typeof res.headers.getSetCookie === 'function'
+    ? res.headers.getSetCookie()
+    : [res.headers.get('set-cookie')].filter(Boolean)
+  for (const setCookie of raw) {
+    const [pair] = String(setCookie).split(';')
+    const eq = pair.indexOf('=')
+    if (eq < 0) continue
+    const k = pair.slice(0, eq).trim()
+    const v = pair.slice(eq + 1).trim()
+    if (!k) continue
+    if (v) cookieJar.set(k, v)
+    else cookieJar.delete(k)
+  }
+}
+
+const call = async (path, { method = 'GET', body, cookie = true, redirect = 'follow' } = {}) => {
   const headers = { 'Content-Type': 'application/json' }
   if (cookie && cookieJar.size) {
     headers.Cookie = [...cookieJar.entries()].map(([k, v]) => `${k}=${v}`).join('; ')
   }
-  const res = await fetch(base + path, { method, headers, body: body ? JSON.stringify(body) : undefined })
-  const setCookie = res.headers.get('set-cookie')
-  if (setCookie) {
-    const [pair] = setCookie.split(';')
-    const [k, v] = pair.split('=')
-    if (v) cookieJar.set(k, v); else cookieJar.delete(k)
-  }
+  const res = await fetch(base + path, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+    redirect,
+  })
+  storeCookies(res)
   const text = await res.text()
-  return { status: res.status, json: text ? JSON.parse(text) : null }
+  return {
+    status: res.status,
+    json: text ? (() => { try { return JSON.parse(text) } catch { return null } })() : null,
+    location: res.headers.get('location'),
+  }
+}
+
+const signInGoogle = async (profile) => {
+  googleProfile = profile
+  const start = await call('/api/auth/google', { redirect: 'manual' })
+  assert.equal(start.status, 302)
+  const state = cookieJar.get(OAUTH_STATE_COOKIE)
+  assert.ok(state)
+  const cb = await call(`/api/auth/google/callback?code=test-code&state=${state}`, { redirect: 'manual' })
+  return cb
 }
 
 describe('API', () => {
@@ -30,6 +68,27 @@ describe('API', () => {
       jwtSecret: 'test-secret',
       serveClient: false,
       adminEmails: ['owner@mail.udp.cl'],
+      google: {
+        clientId: 'test.apps.googleusercontent.com',
+        clientSecret: 'test-secret',
+      },
+      fetchImpl: async (url, opts = {}) => {
+        const href = String(url)
+        if (href.includes('oauth2.googleapis.com/token')) {
+          return new Response(JSON.stringify({ access_token: 'ya29.test' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (href.includes('oauth2/v3/userinfo')) {
+          assert.match(String(opts.headers?.Authorization || ''), /Bearer ya29\.test/)
+          return new Response(JSON.stringify(googleProfile), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        return fetch(url, opts)
+      },
     })
     await new Promise(resolve => { server = app.listen(0, resolve) })
     base = `http://127.0.0.1:${server.address().port}`
@@ -44,6 +103,7 @@ describe('API', () => {
     const r = await call('/api/health')
     assert.equal(r.status, 200)
     assert.equal(r.json.db, 'sqlite')
+    assert.equal(r.json.google, true)
   })
 
   it('rejects unauthenticated data access', async () => {
@@ -51,23 +111,45 @@ describe('API', () => {
     assert.equal(r.status, 401)
   })
 
-  it('validates registration input', async () => {
-    const r = await call('/api/auth/register', { method: 'POST', body: { email: 'bad', name: 'A', password: '123' } })
-    assert.equal(r.status, 400)
+  it('disables password register and login', async () => {
+    const reg = await call('/api/auth/register', {
+      method: 'POST', body: { email: 'ana@mail.udp.cl', name: 'Ana', password: 'secreto1' },
+    })
+    assert.equal(reg.status, 410)
+
+    const login = await call('/api/auth/login', {
+      method: 'POST', body: { email: 'ana@mail.udp.cl', password: 'secreto1' },
+    })
+    assert.equal(login.status, 410)
+    assert.equal(login.json.error, 'Usa tu correo UDP con Google para entrar')
   })
 
-  it('registers, persists data and reads it back', async () => {
-    const reg = await call('/api/auth/register', {
-      method: 'POST', body: { email: 'Ana@Mail.udp.cl', name: 'Ana', password: 'secreto1' },
+  it('redirects to Google with the UDP hosted domain', async () => {
+    const r = await call('/api/auth/google', { redirect: 'manual', cookie: false })
+    assert.equal(r.status, 302)
+    const location = new URL(r.location)
+    assert.equal(location.hostname, 'accounts.google.com')
+    assert.equal(location.searchParams.get('hd'), 'udp.cl')
+    assert.equal(location.searchParams.get('prompt'), 'select_account')
+    assert.ok(cookieJar.has(OAUTH_STATE_COOKIE))
+  })
+
+  it('creates a UDP session from Google and persists data', async () => {
+    const cb = await signInGoogle({
+      email: 'Ana@Mail.udp.cl',
+      email_verified: true,
+      name: 'Ana',
+      sub: 'google-ana',
     })
-    assert.equal(reg.status, 201)
-    assert.equal(reg.json.user.email, 'ana@mail.udp.cl')
-    assert.equal(reg.json.admin, false)
+    assert.equal(cb.status, 302)
+    assert.equal(cb.location, '/')
     assert.ok(cookieJar.has('mo_session'))
 
     const me = await call('/api/auth/me')
     assert.equal(me.status, 200)
+    assert.equal(me.json.user.email, 'ana@mail.udp.cl')
     assert.equal(me.json.user.name, 'Ana')
+    assert.equal(me.json.admin, false)
 
     const save = await call('/api/data', {
       method: 'POST',
@@ -91,17 +173,17 @@ describe('API', () => {
     assert.equal(r.status, 400)
   })
 
-  it('prevents duplicate accounts and validates login', async () => {
-    const dup = await call('/api/auth/register', {
-      method: 'POST', body: { email: 'ana@mail.udp.cl', name: 'Ana', password: 'secreto1' },
+  it('reuses the same account when the same Google email returns', async () => {
+    const first = await call('/api/auth/me')
+    const cb = await signInGoogle({
+      email: 'ana@mail.udp.cl',
+      email_verified: true,
+      name: 'Ana',
+      sub: 'google-ana',
     })
-    assert.equal(dup.status, 409)
-
-    const bad = await call('/api/auth/login', { method: 'POST', body: { email: 'ana@mail.udp.cl', password: 'mal' } })
-    assert.equal(bad.status, 401)
-
-    const ok = await call('/api/auth/login', { method: 'POST', body: { email: 'ana@mail.udp.cl', password: 'secreto1' } })
-    assert.equal(ok.status, 200)
+    assert.equal(cb.status, 302)
+    const me = await call('/api/auth/me')
+    assert.equal(me.json.user.id, first.json.user.id)
   })
 
   it('logout clears the session', async () => {
@@ -123,15 +205,33 @@ describe('API', () => {
     assert.equal(r.status, 404)
   })
 
+  it('rejects Gmail from Google and does not open a session', async () => {
+    cookieJar.clear()
+    const cb = await signInGoogle({
+      email: 'alexis@gmail.com',
+      email_verified: true,
+      name: 'Alexis',
+      sub: 'google-gmail',
+    })
+    assert.equal(cb.status, 302)
+    assert.equal(cb.location, '/?error=udp')
+    assert.equal(cookieJar.has('mo_session'), false)
+  })
+
   it('hides the member list from guests and regular accounts', async () => {
     const anon = await call('/api/admin/users', { cookie: false })
     assert.equal(anon.status, 401)
 
-    const asAna = await call('/api/auth/login', {
-      method: 'POST', body: { email: 'ana@mail.udp.cl', password: 'secreto1' },
+    const asAna = await signInGoogle({
+      email: 'ana@mail.udp.cl',
+      email_verified: true,
+      name: 'Ana',
+      sub: 'google-ana',
     })
-    assert.equal(asAna.status, 200)
-    assert.equal(asAna.json.admin, false)
+    assert.equal(asAna.status, 302)
+
+    const me = await call('/api/auth/me')
+    assert.equal(me.json.admin, false)
 
     const forbidden = await call('/api/admin/users')
     assert.equal(forbidden.status, 403)
@@ -139,12 +239,16 @@ describe('API', () => {
   })
 
   it('lets an admin list registered people without password hashes', async () => {
-    const owner = await call('/api/auth/register', {
-      method: 'POST',
-      body: { email: 'Owner@Mail.udp.cl', name: 'Alexis', password: 'secreto1' },
+    const owner = await signInGoogle({
+      email: 'Owner@Mail.udp.cl',
+      email_verified: true,
+      name: 'Alexis',
+      sub: 'google-owner',
     })
-    assert.equal(owner.status, 201)
-    assert.equal(owner.json.admin, true)
+    assert.equal(owner.status, 302)
+
+    const me = await call('/api/auth/me')
+    assert.equal(me.json.admin, true)
 
     const list = await call('/api/admin/users')
     assert.equal(list.status, 200)
@@ -160,30 +264,5 @@ describe('API', () => {
       assert.ok(user.createdAt)
       assert.ok(user.id)
     }
-  })
-
-  it('rejects Gmail and other non-UDP emails on register and login', async () => {
-    const message = 'Solo se puede entrar con un correo institucional UDP (@mail.udp.cl)'
-
-    const reg = await call('/api/auth/register', {
-      method: 'POST',
-      body: { email: 'alexis@gmail.com', name: 'Alexis', password: 'secreto1' },
-    })
-    assert.equal(reg.status, 403)
-    assert.equal(reg.json.error, message)
-
-    const login = await call('/api/auth/login', {
-      method: 'POST',
-      body: { email: 'alexis@gmail.com', password: 'secreto1' },
-    })
-    assert.equal(login.status, 403)
-    assert.equal(login.json.error, message)
-
-    const ok = await call('/api/auth/register', {
-      method: 'POST',
-      body: { email: 'ana.udp@mail.udp.cl', name: 'Ana UDP', password: 'secreto1' },
-    })
-    assert.equal(ok.status, 201)
-    assert.equal(ok.json.user.email, 'ana.udp@mail.udp.cl')
   })
 })

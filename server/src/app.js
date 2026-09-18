@@ -7,6 +7,11 @@ import {
   COOKIE_NAME, cookieOptions, createAuthService, verifySession, httpError,
   parseAdminEmails, isAdminEmail, parseAllowedEmailDomains, isCampusEmail,
 } from './auth.js'
+import {
+  OAUTH_PKCE_COOKIE, OAUTH_STATE_COOKIE,
+  buildGoogleAuthUrl, createPkce, exchangeGoogleCode, fetchGoogleUser,
+  googleEmailVerified, requestOrigin,
+} from './googleAuth.js'
 import { catalogPayload } from './udpCareers.js'
 import { loadCareerOffering } from './oferta.js'
 
@@ -33,11 +38,25 @@ export function createApp({
   db, jwtSecret, serveClient = true, fetchImpl = fetch,
   adminEmails = parseAdminEmails(),
   allowedEmailDomains = parseAllowedEmailDomains(),
+  google = {
+    clientId: process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+  },
 } = {}) {
   const app = express()
   const auth = createAuthService(db, jwtSecret, { allowedEmailDomains })
   const admin = (user) => isAdminEmail(user?.email, adminEmails)
   const withRole = (user) => ({ user, admin: admin(user) })
+  const googleReady = Boolean(google?.clientId && google?.clientSecret)
+  const oauthCookie = () => ({ ...cookieOptions(), maxAge: 10 * 60 * 1000 })
+  const passwordDisabled = { error: 'Usa tu correo UDP con Google para entrar' }
+
+  const failGoogle = (res, code) => {
+    res.clearCookie(COOKIE_NAME, { path: '/' })
+    res.clearCookie(OAUTH_STATE_COOKIE, { path: '/' })
+    res.clearCookie(OAUTH_PKCE_COOKIE, { path: '/' })
+    res.redirect(`/?error=${code}`)
+  }
 
   app.disable('x-powered-by')
   app.set('trust proxy', 1)
@@ -68,7 +87,7 @@ export function createApp({
 
   const setSession = (res, token) => res.cookie(COOKIE_NAME, token, cookieOptions())
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true, db: db.kind }))
+  app.get('/api/health', (_req, res) => res.json({ ok: true, db: db.kind, google: googleReady }))
 
   app.get('/api/oferta', (_req, res) => res.json(catalogPayload()))
 
@@ -79,20 +98,58 @@ export function createApp({
   })
 
   // ── Auth ──────────────────────────────────────────────────────────────────
-  app.post('/api/auth/register', async (req, res, next) => {
-    try {
-      const { user, token } = await auth.register(req.body || {})
-      setSession(res, token)
-      res.status(201).json(withRole(user))
-    } catch (err) { next(err) }
+  app.post('/api/auth/register', (_req, res) => res.status(410).json(passwordDisabled))
+  app.post('/api/auth/login', (_req, res) => res.status(410).json(passwordDisabled))
+
+  app.get('/api/auth/google', (req, res) => {
+    if (!googleReady) return res.redirect('/?error=config')
+    const { state, verifier, challenge } = createPkce()
+    const redirectUri = `${requestOrigin(req)}/api/auth/google/callback`
+    res.cookie(OAUTH_STATE_COOKIE, state, oauthCookie())
+    res.cookie(OAUTH_PKCE_COOKIE, verifier, oauthCookie())
+    res.redirect(buildGoogleAuthUrl({
+      clientId: google.clientId,
+      redirectUri,
+      state,
+      challenge,
+    }))
   })
 
-  app.post('/api/auth/login', async (req, res, next) => {
+  app.get('/api/auth/google/callback', async (req, res) => {
     try {
-      const { user, token } = await auth.login(req.body || {})
+      if (!googleReady) return failGoogle(res, 'config')
+      if (req.query.error) return failGoogle(res, 'google')
+      const code = String(req.query.code || '')
+      const state = String(req.query.state || '')
+      const expectedState = String(req.cookies?.[OAUTH_STATE_COOKIE] || '')
+      const verifier = String(req.cookies?.[OAUTH_PKCE_COOKIE] || '')
+      if (!code || !state || !expectedState || state !== expectedState || !verifier) {
+        return failGoogle(res, 'google')
+      }
+
+      const redirectUri = `${requestOrigin(req)}/api/auth/google/callback`
+      const tokens = await exchangeGoogleCode({
+        fetchImpl,
+        clientId: google.clientId,
+        clientSecret: google.clientSecret,
+        code,
+        redirectUri,
+        verifier,
+      })
+      const profile = await fetchGoogleUser({ fetchImpl, accessToken: tokens.access_token })
+      if (!googleEmailVerified(profile)) return failGoogle(res, 'google')
+
+      const { token } = await auth.loginWithGoogle({
+        email: profile.email,
+        name: profile.name || [profile.given_name, profile.family_name].filter(Boolean).join(' '),
+      })
+      res.clearCookie(OAUTH_STATE_COOKIE, { path: '/' })
+      res.clearCookie(OAUTH_PKCE_COOKIE, { path: '/' })
       setSession(res, token)
-      res.json(withRole(user))
-    } catch (err) { next(err) }
+      res.redirect('/')
+    } catch (err) {
+      failGoogle(res, err.status === 403 ? 'udp' : 'google')
+    }
   })
 
   app.post('/api/auth/logout', (_req, res) => {
