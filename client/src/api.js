@@ -31,4 +31,6 @@ export const api = {
   logout: () => request('/api/auth/logout', { method: 'POST' }),
   loadData: () => request('/api/data'),
   saveData: (data, { keepalive = false } = {}) => request('/api/data', { method: 'POST', body: { data }, keepalive }),
+  listOfferings: () => request('/api/oferta'),
+  loadOffering: (id) => request(`/api/oferta/${encodeURIComponent(id)}`),
 }

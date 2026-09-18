@@ -5,9 +5,10 @@ import {
   shortEventType,
   normalizeEventType,
 } from './offeringParser'
-import { CURRICULUM, matchSemesterCourses } from './curriculum'
+import { CURRICULUM, matchSemesterCourses, offeringHasInformaticaPlan } from './curriculum'
 import PluxeeTab from './PluxeeTab'
 import { LS, store } from './store'
+import { api } from './api'
 import {
   dateKey,
   greetingForHour,
@@ -1083,6 +1084,17 @@ function ConfigTab({
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [selectedSemester, setSelectedSemester] = useState(() => LS.get('app_semester_v1', ''))
+  const [careerId, setCareerId] = useState(() => LS.get('app_career_v1', ''))
+  const [catalog, setCatalog] = useState(null)
+  const [loadingCareer, setLoadingCareer] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    api.listOfferings()
+      .then(data => { if (!cancelled) setCatalog(data) })
+      .catch(() => { if (!cancelled) setCatalog({ faculties: [] }) })
+    return () => { cancelled = true }
+  }, [])
 
   const norm = (s) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
   const semesterMatch = offering && selectedSemester
@@ -1097,31 +1109,51 @@ function ConfigTab({
       }).slice(0, 8)
     : []
 
+  const applyParsedOffering = (parsed, toastDetail) => {
+    const semesterCourses = selectedSemester
+      ? matchSemesterCourses(parsed, selectedSemester).available
+      : []
+    setOffering(parsed)
+    setMyCourses(semesterCourses)
+    setSectionSelections({})
+    setSchedule(prev => prev.filter(block => !block.fromOffering))
+    showToast(
+      toastDetail || (
+        semesterCourses.length
+          ? `${parsed.courseList.length} ramos cargados · ${semesterCourses.length} seleccionados ✓`
+          : `${parsed.courseList.length} ramos cargados ✓`
+      )
+    )
+  }
+
   const handleFile = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
     reader.onload = () => {
       try {
-        const parsed = parseAcademicOffering(reader.result, file.name)
-        const semesterCourses = selectedSemester
-          ? matchSemesterCourses(parsed, selectedSemester).available
-          : []
-        setOffering(parsed)
-        setMyCourses(semesterCourses)
-        setSectionSelections({})
-        setSchedule(prev => prev.filter(block => !block.fromOffering))
-        showToast(
-          semesterCourses.length
-            ? `${parsed.courseList.length} ramos cargados · ${semesterCourses.length} seleccionados ✓`
-            : `${parsed.courseList.length} ramos cargados ✓`
-        )
+        applyParsedOffering(parseAcademicOffering(reader.result, file.name))
       } catch (err) {
         showToast(err.message || 'Error al leer el archivo', 'err')
       }
     }
     reader.readAsText(file, 'UTF-8')
     e.target.value = ''
+  }
+
+  const handleCareerChange = async (id) => {
+    setCareerId(id)
+    LS.set('app_career_v1', id)
+    if (!id) return
+    setLoadingCareer(true)
+    try {
+      const { offering: parsed, career } = await api.loadOffering(id)
+      applyParsedOffering(parsed, `${parsed.courseList.length} ramos de ${career.name} ✓`)
+    } catch (err) {
+      showToast(err.message || 'No se pudo cargar la oferta de la UDP', 'err')
+    } finally {
+      setLoadingCareer(false)
+    }
   }
 
   const handleSemesterChange = (value) => {
@@ -1194,6 +1226,8 @@ function ConfigTab({
     setOffering(null)
     setMyCourses([])
     setSectionSelections({})
+    setCareerId('')
+    LS.set('app_career_v1', '')
     setSchedule(prev => prev.filter(b => !b.fromOffering))
     showToast('Oferta académica eliminada')
   }
@@ -1271,7 +1305,7 @@ function ConfigTab({
         background: 'var(--info-bg)', borderRadius: 14, padding: '12px 14px', marginBottom: 16,
         border: '1px solid var(--info-border)', fontSize: 12, color: 'var(--info-text)', lineHeight: 1.5,
       }}>
-        Configura tu semestre aquí. Más opciones se agregarán pronto.
+        Configura tu semestre aquí. Elige tu carrera para cargar la oferta UDP y después las secciones.
       </div>
 
       <div style={{
@@ -1280,14 +1314,35 @@ function ConfigTab({
       }}>
         <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)', marginBottom: 8 }}>Oferta académica</p>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 12 }}>
-          Exporta tu oferta desde Excel como CSV y súbela aquí. Luego busca y agrega solo los ramos que cursas.
+          Elige tu carrera para cargar automáticamente la oferta del 2° semestre 2026
+          (secciones, horarios y profesores). Después busca ramos y asigna secciones.
         </p>
+        <select
+          value={careerId}
+          disabled={loadingCareer}
+          onChange={e => handleCareerChange(e.target.value)}
+          style={{ ...inputSt, marginBottom: 10 }}
+        >
+          <option value="">— Elige tu carrera —</option>
+          {(catalog?.faculties || []).map(faculty => (
+            <optgroup key={faculty.name} label={faculty.name}>
+              {faculty.careers.map(career => (
+                <option key={career.id} value={career.id}>{career.name}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+        {loadingCareer && (
+          <p style={{ fontSize: 12, color: 'var(--info-text)', marginBottom: 10 }}>
+            Cargando oferta desde la UDP…
+          </p>
+        )}
         <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" onChange={handleFile} style={{ display: 'none' }} />
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={() => fileRef.current?.click()} style={{
-            ...primaryBtn, flex: 'none', display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px',
+            ...secondaryBtn, padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 6,
           }}>
-            <Icon name="upload" size={15} /> Cargar CSV
+            <Icon name="upload" size={15} /> Subir CSV
           </button>
           {offering && (
             <button onClick={clearOffering} style={{ ...secondaryBtn, padding: '9px 14px', color: 'var(--danger-text)', borderColor: 'var(--danger-border)' }}>
@@ -1303,7 +1358,7 @@ function ConfigTab({
         )}
       </div>
 
-      {offering && (
+      {offering && offeringHasInformaticaPlan(offering) && (
         <div style={{
           background: 'var(--bg-card)', borderRadius: 14, padding: 14,
           marginBottom: 16, border: '1px solid var(--border)',

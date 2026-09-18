@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url'
 import {
   COOKIE_NAME, cookieOptions, createAuthService, verifySession, httpError,
 } from './auth.js'
+import { catalogPayload } from './udpCareers.js'
+import { loadCareerOffering } from './oferta.js'
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 const CLIENT_DIST = join(__dir, '..', '..', 'client', 'dist')
@@ -20,12 +22,13 @@ export const ALLOWED_KEYS = new Set([
   'app_my_courses_v1',
   'app_section_sel_v1',
   'app_semester_v1',
+  'app_career_v1',
   'app_dark_mode',
 ])
 
 const MAX_VALUE_BYTES = 2 * 1024 * 1024
 
-export function createApp({ db, jwtSecret, serveClient = true }) {
+export function createApp({ db, jwtSecret, serveClient = true, fetchImpl = fetch } = {}) {
   const app = express()
   const auth = createAuthService(db, jwtSecret)
 
@@ -50,6 +53,14 @@ export function createApp({ db, jwtSecret, serveClient = true }) {
   const setSession = (res, token) => res.cookie(COOKIE_NAME, token, cookieOptions())
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, db: db.kind }))
+
+  app.get('/api/oferta', (_req, res) => res.json(catalogPayload()))
+
+  app.get('/api/oferta/:id', async (req, res, next) => {
+    try {
+      res.json(await loadCareerOffering(req.params.id, { fetchImpl }))
+    } catch (err) { next(err) }
+  })
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   app.post('/api/auth/register', async (req, res, next) => {

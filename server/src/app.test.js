@@ -104,4 +104,16 @@ describe('API', () => {
     const me = await call('/api/auth/me')
     assert.equal(me.status, 401)
   })
+
+  it('lists UDP academic offerings without auth', async () => {
+    const r = await call('/api/oferta', { cookie: false })
+    assert.equal(r.status, 200)
+    assert.ok(r.json.faculties.length > 0)
+    assert.ok(r.json.faculties.some(f => f.careers.some(c => c.id === 'ing_civil_en_infor_y_tel')))
+  })
+
+  it('unknown career offering is 404', async () => {
+    const r = await call('/api/oferta/no-existe', { cookie: false })
+    assert.equal(r.status, 404)
+  })
 })

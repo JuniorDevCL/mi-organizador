@@ -1,0 +1,60 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import * as XLSX from 'xlsx'
+import { catalogPayload, UDP_CAREERS, UDP_CAREER_BY_ID } from './udpCareers.js'
+import { csvToOffering, xlsBufferToCsv, loadCareerOffering, clearOfferingCache } from './oferta.js'
+
+const sampleRows = [
+  ['Asignatura', 'Nombre Asig.', 'Créditos Asignatura', 'Sección', 'Descrip. Evento', 'Horario', 'Profesor', 'Sede'],
+  ['CIT1010', 'PROGRAMACIÓN', '6', 'Sección 1', 'CÁTEDRA 01', 'LU JU 10:00 - 11:20', 'PROFE UNO', 'S-SANTIAGO'],
+  ['CIT1010', 'PROGRAMACIÓN', '6', 'Sección 1', 'AYUDANTÍA OBLIGATORIA 01', 'MA 10:00 - 11:20', 'AYUDANTE', 'S-SANTIAGO'],
+]
+
+const sampleXlsx = () => {
+  const sheet = XLSX.utils.aoa_to_sheet(sampleRows)
+  const book = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(book, sheet, 'Sheet1')
+  return XLSX.write(book, { type: 'buffer', bookType: 'xlsx' })
+}
+
+test('el catálogo incluye las carreras UDP publicadas', () => {
+  const catalog = catalogPayload()
+  assert.ok(catalog.faculties.length >= 10)
+  assert.ok(UDP_CAREERS.length >= 40)
+  assert.equal(UDP_CAREER_BY_ID.ing_civil_en_infor_y_tel.name.includes('Informática'), true)
+  assert.equal(
+    catalog.faculties.some(f => f.careers.some(c => c.id === 'psicologia')),
+    true,
+  )
+})
+
+test('convierte un excel de oferta a ramos y secciones', () => {
+  const csv = xlsBufferToCsv(sampleXlsx())
+  const career = UDP_CAREER_BY_ID.ing_civil_en_infor_y_tel
+  const offering = csvToOffering(csv, career)
+  assert.equal(offering.courseList.length, 1)
+  assert.ok(offering.courses.CIT1010.sections['Sección 1'])
+  assert.equal(offering.courses.CIT1010.sections['Sección 1'].events.length, 2)
+  assert.equal(offering.careerId, career.id)
+})
+
+test('descarga la oferta de una carrera con fetch inyectado', async () => {
+  clearOfferingCache()
+  const buf = sampleXlsx()
+  const payload = await loadCareerOffering('ing_civil_en_infor_y_tel', {
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => buf,
+    }),
+  })
+  assert.equal(payload.career.id, 'ing_civil_en_infor_y_tel')
+  assert.equal(payload.offering.courseList.length, 1)
+})
+
+test('rechaza una carrera que no está en el catálogo', async () => {
+  await assert.rejects(
+    () => loadCareerOffering('carrera-inventada'),
+    (err) => err.status === 404,
+  )
+})

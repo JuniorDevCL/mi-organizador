@@ -61,6 +61,9 @@ export const CURRICULUM = [
 export const getCurriculumSemester = (semester) =>
   CURRICULUM.find(item => item.semester === Number(semester))
 
+export const offeringHasInformaticaPlan = (offering) =>
+  Boolean(offering?.courses?.CIT1000 || offering?.courses?.CIT1010 || offering?.courses?.CIT2114)
+
 export const matchSemesterCourses = (offering, semester) => {
   const plan = getCurriculumSemester(semester)
   if (!offering || !plan) return { plan, available: [], missing: [] }

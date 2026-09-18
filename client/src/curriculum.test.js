@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { CURRICULUM, matchSemesterCourses } from './curriculum.js'
+import { CURRICULUM, matchSemesterCourses, offeringHasInformaticaPlan } from './curriculum.js'
 
 test('la malla contiene once semestres y omite Inglés y CFG', () => {
   assert.equal(CURRICULUM.length, 11)
@@ -21,4 +21,9 @@ test('selecciona solo los ramos del semestre disponibles en la oferta', () => {
   const result = matchSemesterCourses(offering, 4)
   assert.deepEqual(result.available, ['CIT2204', 'CIT2107', 'CBF1002', 'CIT2007'])
   assert.deepEqual(result.missing, ['CIT2008'])
+})
+
+test('detecta si la oferta corresponde a la malla de Informática', () => {
+  assert.equal(offeringHasInformaticaPlan({ courses: { CIT1010: {} } }), true)
+  assert.equal(offeringHasInformaticaPlan({ courses: { DER1000: {} } }), false)
 })

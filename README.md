@@ -17,7 +17,9 @@ Versión 2: **frontend + backend con cuentas de usuario**. Toda la información 
 ├── server/          # Express (API + sirve el frontend compilado)
 │   └── src/
 │       ├── index.js   # Arranque
-│       ├── app.js     # Rutas /api/auth y /api/data
+│       ├── app.js     # Rutas /api/auth, /api/data y /api/oferta
+│       ├── udpCareers.js # Catálogo de carreras UDP
+│       ├── oferta.js  # Descarga y parseo de los .xls de la UDP
 │       ├── auth.js    # Registro, login, sesiones JWT (cookie httpOnly)
 │       └── db.js      # Postgres (producción) o SQLite (desarrollo)
 ├── vercel.json      # Frontend Vite + API Express en Vercel
@@ -82,6 +84,8 @@ El repo también incluye `render.yaml` (Web Service + Postgres). **Start Command
 | POST | `/api/data` | Guarda varias claves: `{ data: { clave: valor } }` |
 | PUT | `/api/data/:key` | Guarda una clave: `{ value }` |
 | GET | `/api/health` | Estado del servicio y motor de base de datos |
+| GET | `/api/oferta` | Catálogo de carreras UDP (2° semestre 2026) |
+| GET | `/api/oferta/:id` | Oferta parseada de esa carrera (secciones y horarios) |
 
 Las sesiones usan una cookie `httpOnly` firmada con `JWT_SECRET` (30 días). Las contraseñas se guardan con bcrypt.
 
