@@ -2016,7 +2016,7 @@ export default function App({ user, onLogout }) {
         <header className="topbar">
           <div className="topbar-mobile-brand">
             <p className="brand-kicker">Mi Centro</p>
-            <h1 className="brand-title">Organización</h1>
+            <h1 className="brand-title">{current.label}</h1>
           </div>
           <div className="topbar-desktop-title">
             <h1>{current.label}</h1>
