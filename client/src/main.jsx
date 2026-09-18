@@ -4,7 +4,10 @@ import App from './App.jsx'
 import AuthScreen from './AuthScreen.jsx'
 import { api } from './api'
 import { store } from './store'
+import { lockToVisibleViewport } from './viewport.js'
 import './index.css'
+
+lockToVisibleViewport()
 
 function applyTheme(dark) {
   document.documentElement.classList.toggle('theme-dark', !!dark)
