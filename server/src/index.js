@@ -7,11 +7,9 @@ const isVercel = Boolean(process.env.VERCEL)
 
 if (!JWT_SECRET) {
   if (process.env.NODE_ENV === 'production' || isVercel) {
-    console.error('Falta JWT_SECRET en las variables de entorno')
-    if (!isVercel) process.exit(1)
-  } else {
-    console.warn('JWT_SECRET no definido: usando clave de desarrollo (no usar en producción)')
+    throw new Error('Falta JWT_SECRET en las variables de entorno')
   }
+  console.warn('JWT_SECRET no definido: usando clave de desarrollo (no usar en producción)')
 }
 
 const db = await createDb()

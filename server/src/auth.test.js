@@ -30,5 +30,6 @@ test('por defecto solo acepta correos UDP', () => {
   assert.equal(isCampusEmail('alguien@gmail.com', ['udp.cl']), false)
   assert.equal(isCampusEmail('alguien@udp.cl.evil.com', ['udp.cl']), false)
   assert.equal(isCampusEmail('alguien@notudp.cl', ['udp.cl']), false)
+  assert.equal(isCampusEmail('profe@depto.udp.cl', ['udp.cl']), false)
   assert.match(campusEmailError(['udp.cl']), /@mail\.udp\.cl/)
 })

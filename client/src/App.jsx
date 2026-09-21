@@ -1085,6 +1085,8 @@ function ConfigTab({
   darkMode, setDarkMode,
   showToast, onScheduleGenerated,
   isAdmin = false,
+  user,
+  onDeleteAccount,
 }) {
   const fileRef = useRef(null)
   const searchRef = useRef(null)
@@ -1094,6 +1096,8 @@ function ConfigTab({
   const [careerId, setCareerId] = useState(() => LS.get('app_career_v1', ''))
   const [catalog, setCatalog] = useState(null)
   const [loadingCareer, setLoadingCareer] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -1308,6 +1312,60 @@ function ConfigTab({
           }} />
         </button>
       </div>
+
+      {onDeleteAccount && (
+        <div style={{
+          background: 'var(--bg-card)', borderRadius: 14, padding: 14, marginBottom: 16,
+          border: '1px solid var(--danger-border)',
+        }}>
+          <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>Borrar cuenta</p>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+            Elimina tu usuario, horario, notas, amigos y sesión. No se puede deshacer.
+          </p>
+          {!confirmDelete ? (
+            <button
+              type="button"
+              className="btn-danger"
+              style={{ marginTop: 12 }}
+              onClick={() => setConfirmDelete(true)}
+            >
+              Borrar mi cuenta
+            </button>
+          ) : (
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <p style={{ fontSize: 12, color: 'var(--err-text)' }}>
+                ¿Seguro que quieres borrar {user?.email}?
+              </p>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn-danger"
+                  disabled={deleting}
+                  onClick={async () => {
+                    setDeleting(true)
+                    try {
+                      await onDeleteAccount()
+                    } catch (err) {
+                      setDeleting(false)
+                      showToast(err.message || 'No se pudo borrar la cuenta', 'err')
+                    }
+                  }}
+                >
+                  {deleting ? 'Borrando…' : 'Sí, borrar todo'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  style={{ width: 'auto' }}
+                  onClick={() => setConfirmDelete(false)}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{
         background: 'var(--info-bg)', borderRadius: 14, padding: '12px 14px', marginBottom: 16,
@@ -1795,7 +1853,7 @@ const SYNC_LABEL = {
   error: 'Sin conexión — se reintentará',
 }
 
-export default function App({ user, onLogout }) {
+export default function App({ user, onLogout, onDeleteAccount }) {
   const [tab, setTab] = useState('goals')
   const [syncStatus, setSyncStatus] = useState('saved')
   useEffect(() => store.subscribe(s => { if (SYNC_LABEL[s]) setSyncStatus(s) }), [])
@@ -2004,7 +2062,7 @@ export default function App({ user, onLogout }) {
       sectionSelections={sectionSelections} setSectionSelections={setSectionSelections}
       darkMode={darkMode} setDarkMode={setDarkMode}
       showToast={showToast} onScheduleGenerated={() => setTab('schedule')}
-      isAdmin={!!user?.admin} />
+      isAdmin={!!user?.admin} user={user} onDeleteAccount={onDeleteAccount} />
   ) : tab === 'salas' ? (
     <SalasTab />
   ) : tab === 'friends' ? (

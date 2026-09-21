@@ -4,8 +4,7 @@
  * - `LS.get/LS.set` conservan la misma firma que antes (la app la usa en todos lados).
  * - Los datos de la cuenta se cargan del servidor al iniciar sesión y cada cambio
  *   se guarda automáticamente (con debounce) en la base de datos.
- * - Algunas claves son solo del dispositivo (p. ej. el token de Google) y se quedan
- *   en localStorage.
+ * - El token de Google Calendar vive solo en sessionStorage (se va al cerrar la pestaña).
  */
 import { api } from './api'
 
@@ -19,9 +18,48 @@ let timer = null
 let listeners = new Set()
 let lastError = null
 
+const safeGet = (storage, k, def) => {
+  try { return JSON.parse(storage.getItem(k)) ?? def } catch { return def }
+}
+
+const safeSet = (storage, k, v) => {
+  try {
+    if (v == null) storage.removeItem(k)
+    else storage.setItem(k, JSON.stringify(v))
+  } catch { /* quota / private mode */ }
+}
+
 const local = {
-  get: (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def } catch { return def } },
-  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch {} },
+  get: (k, def) => safeGet(globalThis.localStorage, k, def),
+  set: (k, v) => safeSet(globalThis.localStorage, k, v),
+  remove: (k) => { try { globalThis.localStorage.removeItem(k) } catch { /* */ } },
+}
+
+const session = {
+  get: (k, def) => {
+    try {
+      const fromSession = globalThis.sessionStorage?.getItem(k)
+      if (fromSession != null) return JSON.parse(fromSession) ?? def
+      const fromLocal = globalThis.localStorage?.getItem(k)
+      if (fromLocal != null) {
+        globalThis.sessionStorage?.setItem(k, fromLocal)
+        globalThis.localStorage.removeItem(k)
+        return JSON.parse(fromLocal) ?? def
+      }
+    } catch { /* */ }
+    return def
+  },
+  set: (k, v) => {
+    try {
+      if (v == null) {
+        globalThis.sessionStorage?.removeItem(k)
+        globalThis.localStorage?.removeItem(k)
+        return
+      }
+      globalThis.sessionStorage?.setItem(k, JSON.stringify(v))
+      globalThis.localStorage?.removeItem(k)
+    } catch { /* */ }
+  },
 }
 
 const cacheKey = (userId) => `mo_cache_${userId}`
@@ -54,11 +92,11 @@ const schedule = () => {
 
 export const LS = {
   get(key, def) {
-    if (LOCAL_ONLY_KEYS.has(key)) return local.get(key, def)
+    if (LOCAL_ONLY_KEYS.has(key)) return session.get(key, def)
     return cache[key] ?? def
   },
   set(key, value) {
-    if (LOCAL_ONLY_KEYS.has(key)) { local.set(key, value); return }
+    if (LOCAL_ONLY_KEYS.has(key)) { session.set(key, value); return }
     cache[key] = value
     if (currentUserId) {
       local.set(cacheKey(currentUserId), cache)
@@ -85,11 +123,14 @@ export const store = {
     local.set(cacheKey(user.id), cache)
     return cache
   },
-  reset() {
+  reset({ clearDevice = false } = {}) {
+    const userId = currentUserId
     currentUserId = null
     cache = {}
     pending = new Map()
     if (timer) { clearTimeout(timer); timer = null }
+    session.set('g_access_token', null)
+    if (clearDevice && userId) local.remove(cacheKey(userId))
   },
   flush,
   subscribe(fn) {
