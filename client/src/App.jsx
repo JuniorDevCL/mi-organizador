@@ -26,7 +26,7 @@ import {
 } from './checklist'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Google Calendar — define VITE_GOOGLE_CLIENT_ID en .env.local o en Netlify
+// Google Calendar — define VITE_GOOGLE_CLIENT_ID en .env.local o en Vercel
 // ─────────────────────────────────────────────────────────────────────────────
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'TU_CLIENT_ID_AQUI.apps.googleusercontent.com'
 const PLACEHOLDER_CLIENT_ID = 'TU_CLIENT_ID_AQUI.apps.googleusercontent.com'
@@ -1947,7 +1947,7 @@ export default function App({ user, onLogout, onDeleteAccount }) {
 
   const connectGoogle = () => {
     if (!isGoogleConfigured()) {
-      showToast('Configura VITE_GOOGLE_CLIENT_ID (Netlify o .env.local)', 'warn')
+      showToast('Configura VITE_GOOGLE_CLIENT_ID (Vercel o .env.local)', 'warn')
       return
     }
     tokenClientRef.current?.requestAccessToken()

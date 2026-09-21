@@ -51,8 +51,6 @@ npm test
 
 ## Despliegue en Vercel
 
-La app en producción es **Vercel**, no Netlify. El sitio `juniordevorganizador` de Netlify quedó enganchado al repo (último deploy bueno: agosto); un preview de Netlify no trae la API ni el login.
-
 Importa **`JuniorDevCL/mi-organizador`** (no `mi-organizador-cloud`, ese repo está vacío), rama **`master`**.
 
 | Campo | Valor |
