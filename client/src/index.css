@@ -260,6 +260,22 @@ input, textarea, select {
 }
 .btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
 
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
+
 .link {
   background: none;
   border: none;

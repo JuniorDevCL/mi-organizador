@@ -27,6 +27,7 @@ const safeJson = (text) => { try { return JSON.parse(text) } catch { return null
 export const api = {
   me: () => request('/api/auth/me'),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
+  deleteAccount: () => request('/api/auth/me', { method: 'DELETE' }),
   loadData: () => request('/api/data'),
   saveData: (data, { keepalive = false } = {}) => request('/api/data', { method: 'POST', body: { data }, keepalive }),
   listOfferings: () => request('/api/oferta'),

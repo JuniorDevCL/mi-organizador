@@ -35,14 +35,34 @@ const SCHEMA = [
      created_at    TEXT NOT NULL,
      UNIQUE (requester_id, addressee_id)
    )`,
+  `CREATE TABLE IF NOT EXISTS sessions (
+     id            TEXT PRIMARY KEY,
+     user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     created_at    TEXT NOT NULL,
+     expires_at    TEXT NOT NULL
+   )`,
+  `CREATE TABLE IF NOT EXISTS friend_invites (
+     id            TEXT PRIMARY KEY,
+     requester_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     email         TEXT NOT NULL,
+     created_at    TEXT NOT NULL,
+     UNIQUE (requester_id, email)
+   )`,
+  `CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id)`,
+  `CREATE INDEX IF NOT EXISTS friend_invites_email_idx ON friend_invites(email)`,
 ]
+
+export function postgresSsl(url, env = process.env) {
+  if (/localhost|127\.0\.0\.1/.test(String(url || ''))) return false
+  if (env.DATABASE_SSL_INSECURE === '1') return { rejectUnauthorized: false }
+  return { rejectUnauthorized: true }
+}
 
 const toSqlitePlaceholders = (sql) => sql.replace(/\$\d+/g, '?')
 
 async function createPostgres(url) {
   const { default: pg } = await import('pg')
-  const ssl = /localhost|127\.0\.0\.1/.test(url) ? false : { rejectUnauthorized: false }
-  const pool = new pg.Pool({ connectionString: url, ssl })
+  const pool = new pg.Pool({ connectionString: url, ssl: postgresSsl(url) })
   for (const stmt of SCHEMA) await pool.query(stmt)
   return {
     kind: 'postgres',

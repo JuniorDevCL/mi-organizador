@@ -32,7 +32,7 @@ function Root() {
       applyTheme(data.app_dark_mode)
       setPhase('ready')
     } catch {
-      store.reset()
+      store.reset({ clearDevice: true })
       setUser(null)
       setPhase('anon')
     }
@@ -46,25 +46,35 @@ function Root() {
 
   useEffect(() => store.subscribe(status => {
     if (status === 'unauthorized') {
-      store.reset()
+      store.reset({ clearDevice: true })
       setUser(null)
       setPhase('anon')
     }
   }), [])
 
-  const logout = async () => {
-    await store.flush()
-    try { await api.logout() } catch { /* la sesión igual se cierra localmente */ }
-    store.reset()
+  const leave = () => {
+    store.reset({ clearDevice: true })
     applyTheme(false)
     setUser(null)
     setPhase('anon')
   }
 
+  const logout = async () => {
+    await store.flush()
+    try { await api.logout() } catch { /* la sesión igual se cierra localmente */ }
+    leave()
+  }
+
+  const deleteAccount = async () => {
+    await store.flush()
+    await api.deleteAccount()
+    leave()
+  }
+
   if (phase === 'checking') return <Splash />
   if (phase === 'loading') return <Splash label={`Hola ${user?.name?.split(' ')[0] || ''}, cargando tus datos…`} />
   if (phase === 'anon') return <AuthScreen />
-  return <App key={user.id} user={user} onLogout={logout} />
+  return <App key={user.id} user={user} onLogout={logout} onDeleteAccount={deleteAccount} />
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(

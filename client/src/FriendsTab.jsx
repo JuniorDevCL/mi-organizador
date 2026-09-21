@@ -71,7 +71,7 @@ export default function FriendsTab() {
   return (
     <div className="campus-page">
       <p className="campus-note">
-        Invita por correo UDP. Al aceptar, se comparte solo el horario (no notas ni checklist).
+        Invita por correo UDP. Al aceptar, se comparte solo el ramo y el bloque (sin sala ni profesor). Si todavía no entra, le llega al iniciar sesión.
       </p>
 
       <form className="friend-invite" onSubmit={invite}>
@@ -117,7 +117,9 @@ export default function FriendsTab() {
             <div key={row.id} className="friend-row">
               <div>
                 <p className="friend-name">{row.friend.name}</p>
-                <p className="friend-email">Esperando a {row.friend.email}</p>
+                <p className="friend-email">
+                  {row.queued ? `Pendiente · entra ${row.friend.email} y le llega` : `Esperando a ${row.friend.email}`}
+                </p>
               </div>
               <button type="button" className="btn-ghost" onClick={async () => { await api.removeFriend(row.id); load() }}>Cancelar</button>
             </div>
@@ -128,7 +130,7 @@ export default function FriendsTab() {
       <section>
         <h3 className="campus-h">Mis amigos</h3>
         {bundle.friends.length === 0 && !loading && (
-          <p className="campus-muted">Todavía no tienes amigos. Invita a alguien que ya haya entrado a la app.</p>
+          <p className="campus-muted">Todavía no tienes amigos. Invita un correo UDP; si aún no entra, la solicitud queda en espera.</p>
         )}
         {bundle.friends.map((row) => (
           <div key={row.id} className="friend-row">
@@ -182,7 +184,6 @@ export default function FriendsTab() {
           {detail.schedule.map((block) => (
             <p key={block.id || `${block.day}-${block.startTime}`} className="sala-class">
               {DAY_SHORT[block.day]} {block.startTime}–{block.endTime} · {block.subject}
-              {block.location ? ` · ${block.location}` : ''}
             </p>
           ))}
         </section>

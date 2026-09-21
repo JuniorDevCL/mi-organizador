@@ -46,6 +46,7 @@ const call = async (path, { method = 'GET', body, cookie = true, redirect = 'fol
     status: res.status,
     json: text ? (() => { try { return JSON.parse(text) } catch { return null } })() : null,
     location: res.headers.get('location'),
+    headers: res.headers,
   }
 }
 
@@ -67,6 +68,7 @@ describe('API', () => {
       db,
       jwtSecret: 'test-secret',
       serveClient: false,
+      disableRateLimit: true,
       adminEmails: ['owner@mail.udp.cl'],
       google: {
         clientId: 'test.apps.googleusercontent.com',
@@ -74,8 +76,17 @@ describe('API', () => {
       },
       fetchImpl: async (url, opts = {}) => {
         const href = String(url)
+        if (href.includes('oauth2.googleapis.com/tokeninfo')) {
+          return new Response(JSON.stringify({
+            aud: 'test.apps.googleusercontent.com',
+            azp: 'test.apps.googleusercontent.com',
+            iss: 'https://accounts.google.com',
+            email: googleProfile.email,
+            email_verified: googleProfile.email_verified,
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
         if (href.includes('oauth2.googleapis.com/token')) {
-          return new Response(JSON.stringify({ access_token: 'ya29.test' }), {
+          return new Response(JSON.stringify({ access_token: 'ya29.test', id_token: 'id.jwt' }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           })
@@ -110,8 +121,11 @@ describe('API', () => {
   it('health', async () => {
     const r = await call('/api/health')
     assert.equal(r.status, 200)
+    assert.equal(r.json.ok, true)
     assert.equal(r.json.db, 'sqlite')
     assert.equal(r.json.google, true)
+    assert.match(r.headers.get('content-security-policy') || '', /default-src 'self'/)
+    assert.equal(r.headers.get('x-content-type-options'), 'nosniff')
   })
 
   it('rejects unauthenticated data access', async () => {
@@ -199,6 +213,21 @@ describe('API', () => {
     assert.deepEqual(data.json.data.app_events_v3, [{ id: 'e1', title: 'Control' }])
     assert.equal(data.json.data.app_dark_mode, true)
     assert.deepEqual(data.json.data.app_schedule_v1, [{ id: 'b1' }])
+
+    const stored = await db.get(
+      'SELECT value FROM user_data WHERE user_id = $1 AND key = $2',
+      [me.json.user.id, 'app_events_v3'],
+    )
+    assert.match(String(stored.value), /^enc:v1:/)
+    assert.equal(String(stored.value).includes('Control'), false)
+
+    await db.run(
+      `INSERT INTO user_data (user_id, key, value, updated_at) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
+      [me.json.user.id, 'app_career_v1', '"ing_civil_en_infor_y_tel"', new Date().toISOString()],
+    )
+    const legacy = await call('/api/data')
+    assert.equal(legacy.json.data.app_career_v1, 'ing_civil_en_infor_y_tel')
   })
 
   it('rejects unknown keys', async () => {
@@ -220,8 +249,10 @@ describe('API', () => {
   })
 
   it('logout clears the session', async () => {
+    const stolen = cookieJar.get('mo_session')
     const out = await call('/api/auth/logout', { method: 'POST' })
     assert.equal(out.status, 204)
+    cookieJar.set('mo_session', stolen)
     const me = await call('/api/auth/me')
     assert.equal(me.status, 401)
   })
@@ -233,8 +264,17 @@ describe('API', () => {
     assert.ok(r.json.faculties.some(f => f.careers.some(c => c.id === 'ing_civil_en_infor_y_tel')))
   })
 
-  it('unknown career offering is 404', async () => {
-    const r = await call('/api/oferta/no-existe', { cookie: false })
+  it('requires a session to download a career offering', async () => {
+    const anon = await call('/api/oferta/no-existe', { cookie: false })
+    assert.equal(anon.status, 401)
+
+    await signInGoogle({
+      email: 'ana@mail.udp.cl',
+      email_verified: true,
+      name: 'Ana',
+      sub: 'google-ana',
+    })
+    const r = await call('/api/oferta/no-existe')
     assert.equal(r.status, 404)
   })
 
@@ -316,7 +356,7 @@ describe('API', () => {
     const saved = await call('/api/data', {
       method: 'POST',
       body: { data: { app_schedule_v1: [
-        { id: 'a1', day: 1, startTime: '11:30', endTime: '12:50', subject: 'IA' },
+        { id: 'a1', day: 1, startTime: '11:30', endTime: '12:50', subject: 'IA', professor: 'Secreto', location: 'E441' },
       ] } },
     })
     assert.equal(saved.status, 200)
@@ -364,12 +404,56 @@ describe('API', () => {
     })
     const anaHorario = await call(`/api/friends/${friendshipId}/horario`)
     assert.equal(anaHorario.json.schedule[0].subject, 'IA')
+    assert.equal(anaHorario.json.schedule[0].professor, undefined)
+    assert.equal(anaHorario.json.schedule[0].location, undefined)
 
     const cruce = await call(`/api/friends/cruce?ids=${friendshipId}`)
     assert.equal(cruce.status, 200)
     assert.ok(cruce.json.slots.length >= 7)
     const busy = cruce.json.slots.find((slot) => slot.day === 1 && slot.block.id === '11:30')
     assert.equal(busy.free, false)
+  })
+
+  it('queues a friend invite until the other UDP account signs in', async () => {
+    await signInGoogle({
+      email: 'owner@mail.udp.cl',
+      email_verified: true,
+      name: 'Alexis',
+      sub: 'google-owner',
+    })
+    const invite = await call('/api/friends', { method: 'POST', body: { email: 'nuevo@mail.udp.cl' } })
+    assert.equal(invite.status, 201)
+    assert.equal(invite.json.status, 'pending')
+    assert.equal(invite.json.queued, true)
+
+    const listed = await call('/api/friends')
+    assert.equal(listed.json.outgoing.some((row) => row.friend.email === 'nuevo@mail.udp.cl'), true)
+
+    await signInGoogle({
+      email: 'nuevo@mail.udp.cl',
+      email_verified: true,
+      name: 'Nuevo',
+      sub: 'google-nuevo',
+    })
+    const asNew = await call('/api/friends')
+    assert.equal(asNew.json.incoming.length, 1)
+    assert.equal(asNew.json.incoming[0].friend.email, 'owner@mail.udp.cl')
+
+    const accepted = await call(`/api/friends/${asNew.json.incoming[0].id}/accept`, { method: 'POST' })
+    assert.equal(accepted.status, 200)
+  })
+
+  it('deletes the account and rejects the old session', async () => {
+    await signInGoogle({
+      email: 'borrar@mail.udp.cl',
+      email_verified: true,
+      name: 'Borrar',
+      sub: 'google-borrar',
+    })
+    const gone = await call('/api/auth/me', { method: 'DELETE' })
+    assert.equal(gone.status, 204)
+    const me = await call('/api/auth/me')
+    assert.equal(me.status, 401)
   })
 })
 
@@ -389,6 +473,7 @@ describe('Google OAuth errors', () => {
       db: errorDb,
       jwtSecret: 'test-secret',
       serveClient: false,
+      disableRateLimit: true,
       google: {
         clientId: 'test.apps.googleusercontent.com',
         clientSecret: '  "bad-secret"  ',
@@ -418,5 +503,64 @@ describe('Google OAuth errors', () => {
     const cb = await errorCall(`/api/auth/google/callback?code=test-code&state=${encodeURIComponent(state)}`)
     assert.equal(cb.status, 302)
     assert.equal(cb.location, '/?error=secret')
+  })
+})
+
+describe('production health and bad Google tokens', () => {
+  let extraServer
+  let extraBase
+  let extraDb
+
+  before(async () => {
+    extraDb = await createDb({ databaseUrl: '', sqliteFile: ':memory:' })
+    const app = createApp({
+      db: extraDb,
+      jwtSecret: 'test-secret',
+      serveClient: false,
+      disableRateLimit: true,
+      revealHealth: false,
+      google: {
+        clientId: 'test.apps.googleusercontent.com',
+        clientSecret: 'test-secret',
+      },
+      fetchImpl: async (url) => {
+        const href = String(url)
+        if (href.includes('oauth2.googleapis.com/tokeninfo')) {
+          return new Response(JSON.stringify({ error: 'invalid_token' }), { status: 400 })
+        }
+        if (href.includes('oauth2.googleapis.com/token')) {
+          return new Response(JSON.stringify({ access_token: 'ya29.test', id_token: 'bad.jwt' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        return new Response('{}', { status: 500 })
+      },
+    })
+    await new Promise((resolve) => { extraServer = app.listen(0, resolve) })
+    extraBase = `http://127.0.0.1:${extraServer.address().port}`
+  })
+
+  after(async () => {
+    extraServer.close()
+    await extraDb.close()
+  })
+
+  it('hides database and Google details', async () => {
+    const res = await fetch(`${extraBase}/api/health`)
+    const json = await res.json()
+    assert.equal(res.status, 200)
+    assert.deepEqual(json, { ok: true })
+  })
+
+  it('rejects a login if the id_token is not valid', async () => {
+    const start = await fetch(`${extraBase}/api/auth/google`, { redirect: 'manual' })
+    const state = new URL(start.headers.get('location'), extraBase).searchParams.get('state')
+    const cb = await fetch(
+      `${extraBase}/api/auth/google/callback?code=test-code&state=${encodeURIComponent(state)}`,
+      { redirect: 'manual' },
+    )
+    assert.equal(cb.status, 302)
+    assert.equal(cb.headers.get('location'), '/?error=google')
   })
 })

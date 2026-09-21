@@ -4,18 +4,23 @@ import { existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  COOKIE_NAME, cookieOptions, createAuthService, verifySession, httpError,
+  cookieName, cookieOptions, clearSessionCookies, sessionCookieFrom,
+  createAuthService, verifySession, httpError,
   parseAdminEmails, isAdminEmail, parseAllowedEmailDomains, isCampusEmail,
+  normalizeEmail,
 } from './auth.js'
 import {
   buildGoogleAuthUrl, createPkce, exchangeGoogleCode, fetchGoogleUser,
-  googleEmailVerified, readOAuthState, requestOrigin, sanitizeGoogleValue,
-  signOAuthState,
+  googleEmailVerified, readOAuthState, oauthCallbackUrl, sanitizeGoogleValue,
+  signOAuthState, verifyGoogleIdToken,
 } from './googleAuth.js'
 import { catalogPayload } from './udpCareers.js'
 import { loadCareerOffering } from './oferta.js'
 import { chileClock, createSalasService } from './salas.js'
 import { createFriendsService } from './friends.js'
+import { createUserDataStore } from './cryptoData.js'
+import { createRateLimiter } from './rateLimit.js'
+import { securityHeaders } from './securityHeaders.js'
 
 const __dir = dirname(fileURLToPath(import.meta.url))
 const CLIENT_DIST = join(__dir, '..', '..', 'client', 'dist')
@@ -41,6 +46,8 @@ export function createApp({
   db, jwtSecret, serveClient = true, fetchImpl = fetch,
   adminEmails = parseAdminEmails(),
   allowedEmailDomains = parseAllowedEmailDomains(),
+  disableRateLimit = Boolean(process.env.NODE_TEST_CONTEXT),
+  revealHealth = process.env.NODE_ENV !== 'production' && !process.env.VERCEL,
   google = {
     clientId: process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
@@ -48,6 +55,7 @@ export function createApp({
 } = {}) {
   const app = express()
   const auth = createAuthService(db, jwtSecret, { allowedEmailDomains })
+  const dataStore = createUserDataStore(db, jwtSecret)
   const admin = (user) => isAdminEmail(user?.email, adminEmails)
   const withRole = (user) => ({ user, admin: admin(user) })
   const googleClientId = sanitizeGoogleValue(google?.clientId)
@@ -55,7 +63,7 @@ export function createApp({
   const googleReady = Boolean(googleClientId && googleClientSecret)
   const passwordDisabled = { error: 'Usa tu correo UDP con Google para entrar' }
   const salas = createSalasService({ fetchImpl })
-  const friends = createFriendsService(db, { allowedEmailDomains })
+  const friends = createFriendsService(db, { allowedEmailDomains, dataStore })
   const currentAcademicDay = () => {
     const day = chileClock().day
     return day === 0 || day === 6 ? 1 : day
@@ -63,29 +71,45 @@ export function createApp({
 
   const failGoogle = (res, code) => {
     res.setHeader('Cache-Control', 'no-store')
-    res.clearCookie(COOKIE_NAME, { path: '/' })
+    clearSessionCookies(res)
     res.redirect(`/?error=${code}`)
   }
 
   app.disable('x-powered-by')
   app.set('trust proxy', 1)
+  app.use(securityHeaders)
   app.use(express.json({ limit: '5mb' }))
   app.use(cookieParser())
 
+  if (!disableRateLimit) {
+    const limiter = createRateLimiter()
+    const authLimit = limiter(30)
+    const apiLimit = limiter(180)
+    app.use((req, res, next) => {
+      if (!req.path.startsWith('/api')) return next()
+      return (req.path.startsWith('/api/auth') ? authLimit : apiLimit)(req, res, next)
+    })
+  }
+
   const requireAuth = async (req, res, next) => {
-    const token = req.cookies?.[COOKIE_NAME]
-    const userId = token ? verifySession(token, jwtSecret) : null
-    if (!userId) return next(httpError(401, 'No has iniciado sesión'))
-    const user = await auth.userById(userId)
+    const token = sessionCookieFrom(req)
+    const session = token ? verifySession(token, jwtSecret) : null
+    if (!session) return next(httpError(401, 'No has iniciado sesión'))
+    if (!await auth.sessionValid(session.userId, session.jti)) {
+      clearSessionCookies(res)
+      return next(httpError(401, 'Sesión inválida'))
+    }
+    const user = await auth.userById(session.userId)
     if (!user) {
-      res.clearCookie(COOKIE_NAME, { path: '/' })
+      clearSessionCookies(res)
       return next(httpError(401, 'Sesión inválida'))
     }
     if (!isCampusEmail(user.email, allowedEmailDomains)) {
-      res.clearCookie(COOKIE_NAME, { path: '/' })
+      clearSessionCookies(res)
       return next(httpError(401, 'No has iniciado sesión'))
     }
     req.user = user
+    req.session = session
     next()
   }
 
@@ -94,13 +118,16 @@ export function createApp({
     next()
   }
 
-  const setSession = (res, token) => res.cookie(COOKIE_NAME, token, cookieOptions())
+  const setSession = (res, token) => res.cookie(cookieName(), token, cookieOptions())
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true, db: db.kind, google: googleReady }))
+  app.get('/api/health', (_req, res) => {
+    if (!revealHealth) return res.json({ ok: true })
+    res.json({ ok: true, db: db.kind, google: googleReady })
+  })
 
   app.get('/api/oferta', (_req, res) => res.json(catalogPayload()))
 
-  app.get('/api/oferta/:id', async (req, res, next) => {
+  app.get('/api/oferta/:id', requireAuth, async (req, res, next) => {
     try {
       res.json(await loadCareerOffering(req.params.id, { fetchImpl }))
     } catch (err) { next(err) }
@@ -114,7 +141,7 @@ export function createApp({
     res.setHeader('Cache-Control', 'no-store')
     if (!googleReady) return res.redirect('/?error=config')
     const { verifier, challenge } = createPkce()
-    const redirectUri = `${requestOrigin(req)}/api/auth/google/callback`
+    const redirectUri = oauthCallbackUrl(req)
     const state = signOAuthState(jwtSecret, { verifier, redirectUri })
     res.redirect(buildGoogleAuthUrl({
       clientId: googleClientId,
@@ -139,7 +166,7 @@ export function createApp({
       try {
         const parsed = readOAuthState(jwtSecret, state)
         verifier = parsed.verifier
-        redirectUri = parsed.redirectUri || `${requestOrigin(req)}/api/auth/google/callback`
+        redirectUri = parsed.redirectUri || oauthCallbackUrl(req)
       } catch {
         return failGoogle(res, 'google')
       }
@@ -152,14 +179,21 @@ export function createApp({
         redirectUri,
         verifier,
       })
+      const idClaims = await verifyGoogleIdToken({
+        fetchImpl,
+        idToken: tokens.id_token,
+        clientId: googleClientId,
+      })
       const profile = await fetchGoogleUser({ fetchImpl, accessToken: tokens.access_token })
-      if (!googleEmailVerified(profile)) return failGoogle(res, 'google')
+      if (!googleEmailVerified(profile) || !googleEmailVerified(idClaims)) return failGoogle(res, 'google')
+      if (normalizeEmail(idClaims.email) !== normalizeEmail(profile.email)) return failGoogle(res, 'google')
 
-      const { token } = await auth.loginWithGoogle({
+      const result = await auth.loginWithGoogle({
         email: profile.email,
         name: profile.name || [profile.given_name, profile.family_name].filter(Boolean).join(' '),
       })
-      setSession(res, token)
+      await friends.claimInvites(result.user)
+      setSession(res, result.token)
       res.redirect('/')
     } catch (err) {
       console.error('Google OAuth:', err.code || err.message)
@@ -170,12 +204,23 @@ export function createApp({
     }
   })
 
-  app.post('/api/auth/logout', (_req, res) => {
-    res.clearCookie(COOKIE_NAME, { path: '/' })
+  app.post('/api/auth/logout', async (req, res) => {
+    const token = sessionCookieFrom(req)
+    const session = token ? verifySession(token, jwtSecret) : null
+    if (session?.jti) await auth.revokeSession(session.jti)
+    clearSessionCookies(res)
     res.status(204).end()
   })
 
   app.get('/api/auth/me', requireAuth, (req, res) => res.json(withRole(req.user)))
+
+  app.delete('/api/auth/me', requireAuth, async (req, res, next) => {
+    try {
+      await auth.deleteAccount(req.user.id)
+      clearSessionCookies(res)
+      res.status(204).end()
+    } catch (err) { next(err) }
+  })
 
   app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res, next) => {
     try {
@@ -240,23 +285,14 @@ export function createApp({
   // ── Datos por usuario ─────────────────────────────────────────────────────
   app.get('/api/data', requireAuth, async (req, res, next) => {
     try {
-      const rows = await db.all('SELECT key, value FROM user_data WHERE user_id = $1', [req.user.id])
-      const data = {}
-      for (const row of rows) {
-        try { data[row.key] = JSON.parse(row.value) } catch { /* valor corrupto: se omite */ }
-      }
-      res.json({ data })
+      res.json({ data: await dataStore.getAll(req.user.id) })
     } catch (err) { next(err) }
   })
 
   const upsert = async (userId, key, value) => {
     const serialized = JSON.stringify(value ?? null)
     if (Buffer.byteLength(serialized) > MAX_VALUE_BYTES) throw httpError(413, `El dato "${key}" es demasiado grande`)
-    await db.run(
-      `INSERT INTO user_data (user_id, key, value, updated_at) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (user_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
-      [userId, key, serialized, new Date().toISOString()],
-    )
+    await dataStore.set(userId, key, serialized === 'null' ? null : value)
   }
 
   app.post('/api/data', requireAuth, async (req, res, next) => {

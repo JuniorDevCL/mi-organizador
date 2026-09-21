@@ -5,6 +5,10 @@ export const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 export const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo'
 
+const readJson = async (res) => {
+  try { return await res.json() } catch { return {} }
+}
+
 export function createPkce() {
   const verifier = randomBytes(32).toString('base64url')
   const challenge = createHash('sha256').update(verifier).digest('base64url')
@@ -31,13 +35,46 @@ export function sanitizeGoogleValue(value) {
 }
 
 export function requestOrigin(req) {
-  const fromEnv = String(process.env.PUBLIC_URL || '').trim().replace(/\/$/, '')
-  if (fromEnv) return fromEnv
   const proto = String(req.get?.('x-forwarded-proto') || req.protocol || 'http')
     .split(',')[0].trim()
   const host = String(req.get?.('x-forwarded-host') || req.get?.('host') || '')
     .split(',')[0].trim()
   return `${proto}://${host}`
+}
+
+export function publicOrigin(req) {
+  const fromEnv = String(process.env.PUBLIC_URL || '').trim().replace(/\/$/, '')
+  if (fromEnv) return fromEnv
+  if (process.env.VERCEL_ENV === 'production' && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${String(process.env.VERCEL_PROJECT_PRODUCTION_URL).replace(/^https?:\/\//, '')}`
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${String(process.env.VERCEL_URL).replace(/^https?:\/\//, '')}`
+  }
+  return requestOrigin(req)
+}
+
+export function oauthCallbackUrl(req) {
+  return `${publicOrigin(req)}/api/auth/google/callback`
+}
+
+export async function verifyGoogleIdToken({ fetchImpl = fetch, idToken, clientId }) {
+  if (!idToken) {
+    const err = new Error('Falta el id_token de Google')
+    err.status = 401
+    throw err
+  }
+  const res = await fetchImpl(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`)
+  const json = await readJson(res)
+  const audienceOk = json.aud === clientId || json.azp === clientId
+  const issuerOk = json.iss === 'https://accounts.google.com' || json.iss === 'accounts.google.com'
+  const verified = json.email_verified === true || json.email_verified === 'true'
+  if (!res.ok || !json.email || !audienceOk || !issuerOk || !verified) {
+    const err = new Error('El id_token de Google no es válido')
+    err.status = 401
+    throw err
+  }
+  return json
 }
 
 export function buildGoogleAuthUrl({
@@ -60,10 +97,6 @@ export function buildGoogleAuthUrl({
     hd: hostedDomain,
   })
   return `${GOOGLE_AUTH_URL}?${params}`
-}
-
-const readJson = async (res) => {
-  try { return await res.json() } catch { return {} }
 }
 
 export async function exchangeGoogleCode({
