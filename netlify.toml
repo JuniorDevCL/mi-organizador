@@ -1,0 +1,13 @@
+# Sitio viejo enganchado a GitHub. La app real (API + login) corre en Vercel.
+# Este archivo solo evita el ❌ del bot: publica el frontend estático.
+[build]
+  command = "npm run build"
+  publish = "client/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
