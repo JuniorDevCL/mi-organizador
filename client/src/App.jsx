@@ -12,6 +12,7 @@ import SalasTab from './SalasTab.jsx'
 import FriendsTab from './FriendsTab.jsx'
 import NotasTab from './NotasTab.jsx'
 import SolemnesPanel from './SolemnesPanel.jsx'
+import HomeTab from './HomeTab.jsx'
 import { LS, store } from './store'
 import { api } from './api'
 import {
@@ -187,6 +188,7 @@ const Icon = ({ name, size = 20 }) => {
     grid:     <><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></>,
     user:    <><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
     cloud:   <><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></>,
+    home:    <><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/></>,
   }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -1779,6 +1781,7 @@ function CalendarTab({ events, setEvents, schedule, courseOptions, gToken, conne
 
 // ─── Root App ─────────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
+  { id: 'home', label: 'Inicio', icon: 'home' },
   { id: 'goals', label: 'Mi recorrido', icon: 'check' },
   { id: 'schedule', label: 'Horario', icon: 'book' },
   { id: 'salas', label: 'Salas', icon: 'grid' },
@@ -1796,7 +1799,7 @@ const SYNC_LABEL = {
 }
 
 export default function App({ user, onLogout }) {
-  const [tab, setTab] = useState('goals')
+  const [tab, setTab] = useState('home')
   const [syncStatus, setSyncStatus] = useState('saved')
   useEffect(() => store.subscribe(s => { if (SYNC_LABEL[s]) setSyncStatus(s) }), [])
   const [checklistTemplates, setChecklistTemplates] = useState(() => LS.get('app_checklist_templates_v1', []))
@@ -1986,7 +1989,15 @@ export default function App({ user, onLogout }) {
   const firstName = (user?.name || '').split(' ')[0]
   const initials = (user?.name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
 
-  const content = tab === 'goals' ? (
+  const content = tab === 'home' ? (
+    <HomeTab
+      firstName={firstName}
+      schedule={schedule}
+      events={events}
+      daysMap={checklistDays}
+      onOpen={onTabChange}
+    />
+  ) : tab === 'goals' ? (
     <JourneyTab
       templates={checklistTemplates} setTemplates={setChecklistTemplates}
       daysMap={checklistDays} setDaysMap={setChecklistDays}
