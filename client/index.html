@@ -2,12 +2,49 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Checklist diario, horario, agenda y mapa Pluxee — sincronizados en todos tus dispositivos." />
     <meta name="theme-color" content="#5238C4" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Mi Organizador</title>
+    <style>
+      :root { --app-height: 100vh; --app-height: 100svh; --app-top: 0px; }
+      html, body {
+        height: var(--app-height);
+        max-height: var(--app-height);
+        margin: 0;
+        overflow: hidden;
+        background: #F8F7FC;
+      }
+      #root {
+        position: fixed;
+        top: var(--app-top);
+        left: 0;
+        width: 100%;
+        height: var(--app-height);
+        max-height: var(--app-height);
+        overflow: hidden;
+      }
+    </style>
+    <script>
+      (function () {
+        function fit() {
+          var v = window.visualViewport
+          var h = Math.round((v && v.height) || window.innerHeight)
+          var t = Math.round((v && v.offsetTop) || 0)
+          document.documentElement.style.setProperty('--app-height', h + 'px')
+          document.documentElement.style.setProperty('--app-top', t + 'px')
+        }
+        fit()
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener('resize', fit)
+          window.visualViewport.addEventListener('scroll', fit)
+        }
+        window.addEventListener('orientationchange', function () { setTimeout(fit, 80) })
+      })()
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />

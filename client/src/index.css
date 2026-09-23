@@ -133,6 +133,9 @@ html.theme-dark {
   --radius-card: 16px;
   --page-glow-1: rgba(139, 131, 232, 0.16);
   --page-glow-2: rgba(29, 158, 117, 0.10);
+  --app-height: 100vh;
+  --app-height: 100svh;
+  --app-top: 0px;
 }
 
 html.theme-dark {
@@ -141,7 +144,8 @@ html.theme-dark {
 }
 
 html, body {
-  height: 100%;
+  height: var(--app-height);
+  max-height: var(--app-height);
   overflow: hidden;
   overscroll-behavior: none;
   background: var(--bg-page);
@@ -160,8 +164,15 @@ body {
 
 #root {
   position: fixed;
-  inset: 0;
+  top: var(--app-top);
+  left: 0;
+  right: 0;
+  width: 100%;
+  height: var(--app-height);
+  max-height: var(--app-height);
   overflow: hidden;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 input, textarea, select, button {
@@ -318,17 +329,20 @@ input, textarea, select {
 /* ─── Pantalla de acceso ────────────────────────────────────────────────── */
 .auth-page {
   height: 100%;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 16px 16px 20px;
+  justify-content: flex-start;
+  justify-content: safe center;
+  gap: 12px;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
   max-width: 1040px;
   margin: 0 auto;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
-.auth-page .auth-card { order: -1; }
-.auth-hero { display: flex; flex-direction: column; gap: 14px; }
+.auth-hero { display: none; }
 .auth-brand { display: flex; align-items: center; gap: 14px; }
 .auth-logo {
   width: 52px;
@@ -369,11 +383,12 @@ input, textarea, select {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 22px;
-  padding: 22px 20px 20px;
+  padding: 18px 16px 16px;
   box-shadow: 0 20px 60px var(--shadow);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 .auth-switch {
   display: flex;
@@ -542,17 +557,22 @@ input, textarea, select {
     display: grid;
     grid-template-columns: 1.1fr 0.9fr;
     align-content: center;
+    justify-content: initial;
     gap: 56px;
     padding: 48px 40px;
     overflow: auto;
   }
-  .auth-page .auth-card { order: 0; }
+  .auth-hero {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
   .auth-features {
     display: grid;
     gap: 8px;
     margin-top: 4px;
   }
-  .auth-card { padding: 30px 28px 26px; }
+  .auth-card { padding: 30px 28px 26px; gap: 12px; }
   .auth-title { font-size: 34px; }
 }
 
@@ -582,6 +602,7 @@ input, textarea, select {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 16px 6px;
+  padding-top: max(10px, env(safe-area-inset-top));
   flex-shrink: 0;
 }
 .topbar-desktop-title { display: none; }
@@ -608,7 +629,7 @@ input, textarea, select {
 .content-goals,
 .content-calendar,
 .content-schedule {
-  padding-bottom: 88px;
+  padding-bottom: 24px;
 }
 
 .home-hero {
@@ -765,8 +786,10 @@ input, textarea, select {
 .bottom-nav {
   position: relative;
   flex-shrink: 0;
-  height: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom));
-  padding-bottom: env(safe-area-inset-bottom);
+  min-height: var(--bottom-nav-h);
+  height: auto;
+  padding-top: 6px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
   display: flex;
   overflow-x: auto;
   overflow-y: hidden;
@@ -942,7 +965,7 @@ input, textarea, select {
   .user-name { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .user-email { font-size: 11px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-  .topbar { padding: 28px 40px 6px; }
+  .topbar { padding: 28px 40px 6px; padding-top: 28px; }
   .topbar-mobile-brand { display: none; }
   .topbar-desktop-title { display: block; }
   .topbar-desktop-title h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.6px; color: var(--text); }
