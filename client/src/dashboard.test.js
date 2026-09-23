@@ -13,7 +13,9 @@ test('arma el horario de hoy y marca la clase en curso', () => {
   assert.equal(day.weekend, false)
   assert.deepEqual(day.blocks.map((block) => block.subject), ['IA', 'Álgebra'])
   assert.equal(day.current.subject, 'IA')
+  assert.equal(day.current.status, 'now')
   assert.equal(day.next.subject, 'Álgebra')
+  assert.equal(day.next.status, 'next')
 })
 
 test('el fin de semana no inventa clases', () => {

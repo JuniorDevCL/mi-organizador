@@ -15,21 +15,29 @@ export function todayClasses(schedule, now = new Date()) {
     .filter((block) => Number(block?.day) === day && block.startTime && block.endTime)
     .slice()
     .sort((a, b) => String(a.startTime).localeCompare(String(b.startTime)))
-  const current = blocks.find((block) => {
+  const statusOf = (block) => {
     const start = minutesOf(block.startTime)
     const end = minutesOf(block.endTime)
-    return start != null && end != null && start <= mins && mins < end
-  }) || null
-  const next = blocks.find((block) => {
-    const start = minutesOf(block.startTime)
-    return start != null && start > mins
-  }) || null
+    if (start == null || end == null) return 'later'
+    if (start <= mins && mins < end) return 'now'
+    if (start > mins) return 'later'
+    return 'past'
+  }
+  let sawNext = false
+  const marked = blocks.map((block) => {
+    let status = statusOf(block)
+    if (status === 'later' && !sawNext) {
+      status = 'next'
+      sawNext = true
+    }
+    return { ...block, status }
+  })
   return {
     day,
     weekend: day === 0 || day === 6,
-    blocks,
-    current,
-    next,
+    blocks: marked,
+    current: marked.find((block) => block.status === 'now') || null,
+    next: marked.find((block) => block.status === 'next') || null,
   }
 }
 

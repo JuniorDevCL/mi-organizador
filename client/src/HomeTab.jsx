@@ -69,23 +69,25 @@ export default function HomeTab({ firstName, schedule, events, daysMap, onOpen }
           </p>
         )}
         {day.blocks.map((block) => {
-          const state = block.id && day.current?.id === block.id
-            ? 'now'
-            : block.id && day.next?.id === block.id
-              ? 'next'
-              : ''
+          const label = block.status === 'now'
+            ? 'En curso'
+            : block.status === 'next'
+              ? 'Siguiente'
+              : block.status === 'past'
+                ? 'Ya pasó'
+                : 'Después'
           return (
             <button
               key={block.id || `${block.startTime}-${block.subject}`}
               type="button"
-              className={`home-row ${state}`}
+              className={`home-row ${block.status === 'now' ? 'now' : block.status === 'next' ? 'next' : ''}`}
               onClick={() => onOpen('schedule')}
             >
               <span className="home-time">{block.startTime}–{block.endTime}</span>
               <span className="home-copy">
                 <span className="home-subject">{block.subject || block.courseName || 'Clase'}</span>
                 <span className="home-meta">
-                  {state === 'now' ? 'En curso' : state === 'next' ? 'Siguiente' : 'Hoy'}
+                  {label}
                   {block.eventType ? ` · ${shortEventType(block.eventType)}` : ''}
                   {block.location ? ` · ${block.location}` : ''}
                 </span>
